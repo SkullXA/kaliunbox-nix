@@ -98,7 +98,7 @@
 
     # Clone KaliunBox flake
     echo "Cloning KaliunBox configuration..."
-    git clone https://github.com/YOUR_USERNAME/kaliunbox-nix.git /mnt/etc/nixos/kaliunbox-flake
+    git clone https://github.com/SkullXA/kaliunbox-nix.git /mnt/etc/nixos/kaliunbox-flake
 
     # Install NixOS
     echo "Installing NixOS..."

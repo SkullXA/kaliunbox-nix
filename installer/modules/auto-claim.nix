@@ -204,7 +204,7 @@
       ''
       else ''
         echo "Cloning KaliunBox configuration..."
-        ${pkgs.git}/bin/git clone https://github.com/YOUR_USERNAME/kaliunbox-nix.git /mnt/etc/nixos/kaliunbox-flake
+        ${pkgs.git}/bin/git clone https://github.com/SkullXA/kaliunbox-nix.git /mnt/etc/nixos/kaliunbox-flake
       ''
     }
 
