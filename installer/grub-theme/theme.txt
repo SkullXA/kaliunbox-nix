@@ -1,0 +1,45 @@
+# Kaliun GRUB Theme
+# Based on Proxmox VE style, adapted for Kaliun branding
+
+title-text: "KaliunBox Installer"
+
+desktop-image: "logo.png"
+
+# Boot menu styling
++ boot_menu {
+  left = 20%
+  top = 55%
+  width = 50%
+  height = 35%
+
+  item_color = "#FFFFFF"
+  selected_item_color = "#C9A14A"
+  item_height = 26
+  item_padding = 0
+  item_icon_space = 0
+  item_spacing = 1
+  font = "DejaVu Sans Regular 14"
+}
+
+# Footer help text
++ label {
+  left = 20%
+  top = 90%
+  width = 60%
+  height = 35%
+  color = "#B0B0B0"
+  align = "center"
+  text = "Enter: Select | up/down: Navigate | E: Edit Entry | Esc: Back"
+}
+
+# Boot timeout counter
++ label {
+  id = "__timeout__"
+  text = "%d second(s) until boot"
+  left = 35%
+  top = 85%
+  width = 30%
+  height = 35%
+  color = "#C9A14A"
+  align = "center"
+}

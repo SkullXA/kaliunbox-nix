@@ -1,0 +1,37 @@
+# Nix build results
+result
+result-*
+dist/
+
+# GRUB theme (except our custom one)
+!installer/grub-theme/
+
+# Nix development
+.direnv/
+.envrc
+
+# Hardware configuration (generated during installation)
+hardware-configuration.nix
+
+# Logs
+*.log
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.bak
+
+# Secrets (should never be in git)
+config.json
+*.secret
+*.key

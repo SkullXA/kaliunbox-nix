@@ -1,0 +1,103 @@
+# SeloraBox Plymouth Theme Script
+# Displays background, logo, and QR code for device claiming
+
+# Screen setup
+Window.GetMaxWidth = fun() { return Window.GetWidth(); };
+Window.GetMaxHeight = fun() { return Window.GetHeight(); };
+
+screen_width = Window.GetWidth();
+screen_height = Window.GetHeight();
+
+# Load images
+background_image = Image("background.png");
+logo_image = Image("logo.png");
+qr_image = Image("qr.png");
+
+# Scale background to screen size
+background_scaled = background_image.Scale(screen_width, screen_height);
+background_sprite = Sprite(background_scaled);
+background_sprite.SetPosition(0, 0, 0);
+
+# Position logo at top center
+logo_width = logo_image.GetWidth();
+logo_height = logo_image.GetHeight();
+logo_x = (screen_width - logo_width) / 2;
+logo_y = screen_height * 0.1;  # 10% from top
+logo_sprite = Sprite(logo_image);
+logo_sprite.SetPosition(logo_x, logo_y, 1);
+
+# Position QR code in center
+qr_width = qr_image.GetWidth();
+qr_height = qr_image.GetHeight();
+qr_x = (screen_width - qr_width) / 2;
+qr_y = (screen_height - qr_height) / 2;
+qr_sprite = Sprite(qr_image);
+qr_sprite.SetPosition(qr_x, qr_y, 2);
+
+# Message area below QR code
+message_y = qr_y + qr_height + 40;
+
+# Create message sprite
+message_sprite = Sprite();
+message_sprite.SetPosition(0, message_y, 3);
+
+# Function to display messages
+fun message_callback(text) {
+    # Create text image
+    message_image = Image.Text(text, 1.0, 1.0, 1.0, 1.0, "Sans 16");
+
+    # Center the text
+    message_x = (screen_width - message_image.GetWidth()) / 2;
+
+    message_sprite.SetImage(message_image);
+    message_sprite.SetPosition(message_x, message_y, 3);
+}
+
+Plymouth.SetMessageFunction(message_callback);
+
+# Progress indicator (optional spinning animation)
+progress_image = Image.Text("", 0, 0, 0, 0);
+progress_sprite = Sprite();
+progress_sprite.SetPosition(screen_width / 2, screen_height * 0.9, 4);
+
+# Refresh callback
+fun refresh_callback() {
+    # Reload QR code in case it was updated
+    qr_image = Image("qr.png");
+    qr_sprite.SetImage(qr_image);
+
+    # Reposition in case size changed
+    qr_width = qr_image.GetWidth();
+    qr_height = qr_image.GetHeight();
+    qr_x = (screen_width - qr_width) / 2;
+    qr_y = (screen_height - qr_height) / 2;
+    qr_sprite.SetPosition(qr_x, qr_y, 2);
+}
+
+Plymouth.SetRefreshFunction(refresh_callback);
+
+# Boot progress callback (required but unused)
+fun progress_callback(duration, progress) {
+    # Could add a progress bar here if desired
+}
+
+Plymouth.SetBootProgressFunction(progress_callback);
+
+# Display callback for updates
+fun display_normal_callback() {
+    # Normal display mode
+}
+
+fun display_password_callback(prompt, bullets) {
+    # Not used for this theme
+}
+
+Plymouth.SetDisplayNormalFunction(display_normal_callback);
+Plymouth.SetDisplayPasswordFunction(display_password_callback);
+
+# Quit callback
+fun quit_callback() {
+    # Cleanup if needed
+}
+
+Plymouth.SetQuitFunction(quit_callback);

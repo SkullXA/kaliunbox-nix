@@ -1,0 +1,8 @@
+[Plymouth Theme]
+Name=SeloraBox
+Description=SeloraBox claiming screen with QR code
+ModuleName=script
+
+[script]
+ImageDir=/usr/share/plymouth/themes/selorabox
+ScriptFile=/usr/share/plymouth/themes/selorabox/selorabox.script

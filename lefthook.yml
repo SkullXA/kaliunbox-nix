@@ -1,0 +1,24 @@
+pre-commit:
+  commands:
+    validate-lima-yaml:
+      glob: "lima-*.yaml"
+      run: |
+        for file in {staged_files}; do
+          echo "Validating $file..."
+          limactl validate "$file"
+        done
+    format:
+      glob: "*.nix"
+      run: nix run nixpkgs#alejandra -- {staged_files}
+      stage_fixed: true
+    lint:
+      glob: "*.nix"
+      run: |
+        for file in {staged_files}; do
+          nix run nixpkgs#statix -- check "$file"
+        done
+
+pre-push:
+  commands:
+    flake-check:
+      run: nix flake check --no-build

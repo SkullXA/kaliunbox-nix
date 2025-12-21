@@ -1,0 +1,69 @@
+# Lima configuration for NixOS builds
+# Start with: limactl start lima-nix.yaml
+# Shell into VM: limactl shell nix-builder
+# Run builds: limactl shell nix-builder nix build .#installer-iso
+
+vmType: "vz" # Use Virtualization.framework (faster on macOS)
+os: "Linux"
+arch: "aarch64"
+
+images:
+  - location: "https://cloud-images.ubuntu.com/releases/24.04/release/ubuntu-24.04-server-cloudimg-arm64.img"
+    arch: "aarch64"
+
+cpus: 4
+memory: "8GiB"
+disk: "25GiB"
+
+mounts:
+  - location: "~"
+    writable: true
+  - location: "/tmp/lima"
+    writable: true
+
+provision:
+  - mode: system
+    script: |
+      #!/bin/bash
+      set -eux -o pipefail
+
+      # Install Nix
+      if ! command -v nix &> /dev/null; then
+        echo "Installing Nix..."
+        curl --proto '=https' --tlsv1.2 -sSf -L https://install.determinate.systems/nix | \
+          sh -s -- install linux --no-confirm
+      fi
+
+      # Configure Nix for multi-user
+      mkdir -p /etc/nix
+      cat > /etc/nix/nix.conf <<EOF
+      experimental-features = nix-command flakes
+      build-users-group = nixbld
+      sandbox = true
+      max-jobs = auto
+      cores = 0
+      EOF
+
+      # Install git and other essentials
+      apt-get update
+      apt-get install -y git curl wget
+
+  - mode: user
+    script: |
+      #!/bin/bash
+      set -eux -o pipefail
+
+      # Source Nix
+      if [ -f /nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh ]; then
+        . /nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh
+      fi
+
+      echo "Nix installed successfully!"
+      nix --version || true
+
+ssh:
+  loadDotSSHPubKeys: true
+  forwardAgent: true
+
+hostResolver:
+  enabled: true

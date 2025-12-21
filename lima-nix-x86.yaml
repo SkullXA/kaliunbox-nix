@@ -1,0 +1,75 @@
+# Lima configuration for x86_64 NixOS builds using Rosetta
+# Start with: limactl start lima-nix-x86.yaml --name nix-builder-x86
+# Shell into VM: limactl shell nix-builder-x86
+# Run builds: limactl shell nix-builder-x86 nix build .#packages.x86_64-linux.installer-iso
+
+vmType: "vz" # Use Virtualization.framework (faster on macOS)
+os: "Linux"
+arch: "aarch64"
+
+vmOpts:
+  vz:
+    rosetta:
+      enabled: true
+      binfmt: true
+
+images:
+  - location: "https://cloud-images.ubuntu.com/releases/24.04/release/ubuntu-24.04-server-cloudimg-arm64.img"
+    arch: "aarch64"
+
+cpus: 4
+memory: "8GiB"
+disk: "50GiB"
+
+mounts:
+  - location: "~"
+    writable: true
+  - location: "/tmp/lima"
+    writable: true
+
+provision:
+  - mode: system
+    script: |
+      #!/bin/bash
+      set -eux -o pipefail
+
+      # Install Nix
+      if ! command -v nix &> /dev/null; then
+        echo "Installing Nix..."
+        curl --proto '=https' --tlsv1.2 -sSf -L https://install.determinate.systems/nix | \
+          sh -s -- install linux --no-confirm
+      fi
+
+      # Install git and other essentials
+      apt-get update
+      apt-get install -y git curl wget
+
+      # Configure Nix custom settings for x86_64 support via Rosetta
+      # (Determinate Nix uses nix.custom.conf which gets included)
+      cat > /etc/nix/nix.custom.conf <<'NIXCONF'
+      extra-platforms = x86_64-linux i686-linux
+      extra-sandbox-paths = /mnt/lima-rosetta/rosetta
+      NIXCONF
+
+      # Restart nix-daemon to pick up new settings
+      systemctl restart nix-daemon || true
+
+  - mode: user
+    script: |
+      #!/bin/bash
+      set -eux -o pipefail
+
+      # Source Nix
+      if [ -f /nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh ]; then
+        . /nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh
+      fi
+
+      echo "Nix installed successfully!"
+      nix --version || true
+
+ssh:
+  loadDotSSHPubKeys: true
+  forwardAgent: true
+
+hostResolver:
+  enabled: true

@@ -1,0 +1,6 @@
+# Statix configuration for SeloraBox NixOS
+# https://github.com/nerdypepper/statix
+
+ignore = [
+  '.direnv',
+]
