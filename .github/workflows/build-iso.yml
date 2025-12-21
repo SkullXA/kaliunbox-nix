@@ -34,12 +34,11 @@ jobs:
             max-jobs = auto
             cores = 0
 
-      - name: Setup Cachix (optional - speeds up builds)
+      - name: Setup Cachix (optional)
         uses: cachix/cachix-action@v15
+        continue-on-error: true
         with:
           name: nix-community
-          # If you set up your own Cachix cache, add:
-          # authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
 
       - name: Build x86_64 ISO
         run: |
@@ -76,6 +75,12 @@ jobs:
           sudo rm -rf "$AGENT_TOOLSDIRECTORY"
           df -h
 
+      # IMPORTANT: Setup QEMU BEFORE installing Nix
+      - name: Setup QEMU for aarch64 emulation
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
+
       - name: Install Nix
         uses: cachix/install-nix-action@v27
         with:
@@ -85,16 +90,10 @@ jobs:
             max-jobs = auto
             cores = 0
             extra-platforms = aarch64-linux
-            extra-sandbox-paths = /run/binfmt
 
-      - name: Setup QEMU for aarch64 emulation
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y qemu-user-static binfmt-support
-          sudo update-binfmts --enable qemu-aarch64
-
-      - name: Setup Cachix (optional - speeds up builds)
+      - name: Setup Cachix (optional)
         uses: cachix/cachix-action@v15
+        continue-on-error: true
         with:
           name: nix-community
 
@@ -148,4 +147,3 @@ jobs:
             dist/kaliunbox-aarch64.iso
             dist/kaliunbox-aarch64.iso.sha256
           generate_release_notes: true
-
