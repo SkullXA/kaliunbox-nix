@@ -10,8 +10,8 @@
 
 | Priority | Item | Description |
 |----------|------|-------------|
+| 🔴 HIGH | **Pangolin Integration** | Create real Pangolin credentials on device claim (see Phase 1) |
 | 🟡 Medium | Email Service | Configure SMTP for Gotrue Auth OR enable `GOTRUE_MAILER_AUTOCONFIRM=true` |
-| 🟢 Low | Email Registration | Currently requires email confirmation - code fix added but needs SMTP setup |
 | 🟢 Low | Debug Panel | Added to Settings page - remove before production |
 | 🟢 Low | Local Dev Mode | Clean up `isLocalDev` checks and localhost testing code |
 
@@ -86,19 +86,223 @@ Your KaliunBox is successfully:
 
 ### 🔵 Phase 1: Remote Access (Priority: HIGH)
 
-**Goal**: Allow users to access Home Assistant remotely via `connect.kaliun.com`
+**Goal**: Allow users to access Home Assistant remotely from anywhere
+
+---
+
+#### 📖 What is Pangolin/Newt?
+
+**The Problem**: Customer's KaliunBox sits behind their home router's firewall. Routers block ALL incoming connections. Without remote access, customers can only use Home Assistant when they're home.
+
+**The Solution**: Pangolin is a reverse proxy/tunnel service. Instead of internet → KaliunBox (blocked), the KaliunBox connects OUT to Pangolin, creating a tunnel. Pangolin can then route traffic back through that tunnel.
+
+```
+WITHOUT PANGOLIN (doesn't work):
+Internet ──X──► Router Firewall ──► KaliunBox
+                     │
+                     └── "Blocked!"
+
+WITH PANGOLIN (works):
+Internet ◄──── Pangolin Server ◄──── Outbound Tunnel ◄──── KaliunBox
+                     │
+                     └── "KaliunBox called me, tunnel is open!"
+```
+
+**Terms**:
+| Term | Definition |
+|------|------------|
+| **Pangolin** | Server that receives tunnels and routes traffic (cloud or self-hosted) |
+| **Newt** | Client agent on KaliunBox that creates the WireGuard tunnel |
+| **Site** | One device/URL in Pangolin (1 KaliunBox = 1 site) |
+| **Remote Node** | Self-hosted Pangolin server (unlimited sites) |
+
+---
+
+#### 🏗️ Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                              THE INTERNET                                    │
+└─────────────────────────────────────────────────────────────────────────────┘
+                User visits: https://tomer-ha.pangolin.net
+                                    │
+                                    ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                        PANGOLIN SERVER                                       │
+│              (app.pangolin.net OR pangolin.kaliun.com)                      │
+│                                                                              │
+│   • Receives HTTPS requests from users                                       │
+│   • Looks up which KaliunBox owns that URL                                   │
+│   • Routes traffic through WireGuard tunnel                                  │
+│   • Handles SSL/TLS termination                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+                          ▲         │
+               WireGuard  │         │  HTTPS traffic
+               Tunnel     │         │  to Home Assistant
+               (outbound) │         ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                           KALIUNBOX (Customer's Home)                        │
+│                                                                              │
+│   ┌─────────────────────┐      ┌─────────────────────────────────────────┐  │
+│   │   Newt Container    │      │        Home Assistant VM                │  │
+│   │                     │      │                                         │  │
+│   │  • Connects OUT to  │◄────►│  Port 8123                              │  │
+│   │    Pangolin server  │      │  (receives proxied traffic)             │  │
+│   │  • WireGuard VPN    │      │                                         │  │
+│   │  • No port forward! │      └─────────────────────────────────────────┘  │
+│   └─────────────────────┘                                                    │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+#### ✅ What's Already Implemented
+
+| Component | File | Status |
+|-----------|------|--------|
+| Newt package | `pkgs/fosrl-newt.nix` | ✅ v1.8.0 |
+| Newt container | `modules/newt-container.nix` | ✅ Runs on boot |
+| Config sync | `modules/connect-sync.nix` | ✅ Fetches pangolin creds |
+| Placeholder creds | Connect API | ✅ Returns dummy data |
+
+**Current state**: Newt starts but fails because credentials are placeholders, not real Pangolin creds.
+
+---
+
+#### ⬜ What Needs to Be Done
+
+| Step | Task | Location | Description |
+|------|------|----------|-------------|
+| 1 | Choose Pangolin deployment | Decision | Cloud (app.pangolin.net) vs Self-hosted |
+| 2 | Create Pangolin API integration | Connect API | Call Pangolin API on device claim |
+| 3 | Store real credentials | PostgreSQL | `pangolin_newt_id`, `pangolin_newt_secret`, `pangolin_url` |
+| 4 | Configure HA trusted_proxies | KaliunBox | Trust Pangolin's proxy IP |
+| 5 | Add "Access" button to dashboard | Frontend | Link to `https://{device}.pangolin.net` |
+| 6 | Test end-to-end | Testing | Claim → Tunnel → Access HA remotely |
+
+---
+
+#### 🔀 Deployment Options
+
+**Option A: Pangolin Cloud** (for testing)
+```
+Pros:                          Cons:
+✅ No server to manage         ❌ 1 free site only
+✅ Quick to set up             ❌ $6/site/month after that
+✅ Good for development        ❌ Not scalable for production
+```
+
+**Option B: Self-Hosted Pangolin** (for production)
+```
+Pros:                          Cons:
+✅ Unlimited devices           ❌ Need VPS ($5/month)
+✅ Full control                ❌ More setup complexity
+✅ Custom domain               ❌ You maintain it
+✅ Cost-effective at scale
+```
+
+**Recommendation**: Start with Option A for testing, then migrate to Option B for production.
+
+---
+
+#### 📝 Implementation Steps (Option A - Pangolin Cloud)
+
+**Step 1: Create Pangolin Account**
+1. Go to https://app.pangolin.net
+2. Sign up / create organization
+3. Note your API key
+
+**Step 2: Add Pangolin API to Connect API**
+```javascript
+// In kaliun-connect-api/src/index.js
+// After device is claimed, call Pangolin API:
+
+const PANGOLIN_API = 'https://api.pangolin.net';
+const PANGOLIN_API_KEY = process.env.PANGOLIN_API_KEY;
+
+// Create newt credentials
+const newtResponse = await fetch(`${PANGOLIN_API}/api/v1/newt`, {
+  method: 'POST',
+  headers: { 'Authorization': `Bearer ${PANGOLIN_API_KEY}` },
+  body: JSON.stringify({ name: `kaliun-${installId}` })
+});
+const { id: newt_id, secret: newt_secret } = await newtResponse.json();
+
+// Create site (public URL)
+const siteResponse = await fetch(`${PANGOLIN_API}/api/v1/sites`, {
+  method: 'POST',
+  headers: { 'Authorization': `Bearer ${PANGOLIN_API_KEY}` },
+  body: JSON.stringify({
+    name: customerName,
+    newt_id: newt_id,
+    target: { host: 'localhost', port: 8123 }
+  })
+});
+const { url: pangolin_url } = await siteResponse.json();
+
+// Store in database
+await db.updateInstallation(installId, {
+  pangolin_newt_id: newt_id,
+  pangolin_newt_secret: newt_secret,
+  pangolin_endpoint: 'https://app.pangolin.net',
+  pangolin_url: pangolin_url
+});
+```
+
+**Step 3: Update Dashboard**
+- Show "Access Home Assistant" button when `pangolin_url` is set
+- Link opens `https://{pangolin_url}` in new tab
+
+**Step 4: Environment Variables**
+```bash
+# Add to Railway kaliun-connect-api service
+PANGOLIN_API_KEY=your_api_key_here
+PANGOLIN_ENDPOINT=https://app.pangolin.net
+```
+
+---
+
+#### 📝 Implementation Steps (Option B - Self-Hosted)
+
+**Step 1: Deploy Pangolin to VPS**
+```bash
+# On a $5/mo DigitalOcean/Vultr VPS
+docker run -d \
+  -p 443:443 -p 51820:51820/udp \
+  -v pangolin_data:/data \
+  fosrl/pangolin:latest
+```
+
+**Step 2: Configure DNS**
+- Point `pangolin.kaliun.com` to VPS IP
+- Point `*.pangolin.kaliun.com` to VPS IP (wildcard for device subdomains)
+
+**Step 3: Update Connect API**
+- Same as Option A, but use your own endpoint
+
+---
+
+#### 🎯 Success Criteria
+
+- [ ] User claims KaliunBox
+- [ ] Connect API creates Pangolin site with real credentials
+- [ ] KaliunBox receives credentials via config sync
+- [ ] Newt connects successfully (dashboard shows "Remote Access: Connected")
+- [ ] User clicks "Access Home Assistant" → opens HA in browser
+- [ ] Works from anywhere (phone on cellular, etc.)
+
+---
 
 | Feature | Location | Status | Description |
 |---------|----------|--------|-------------|
-| Pangolin Remote URL | Connect API | ⬜ | Generate unique URL per device |
-| HA Proxy Config | KaliunBox | ⬜ | Configure HA trusted_proxies dynamically |
-| Remote Access Portal | Frontend | ⬜ | "Access Home Assistant" button |
-| SSL Termination | Pangolin | ⬜ | HTTPS for remote connections |
-
-**Implementation Notes**:
-- Newt is already running and connected
-- Need to configure Pangolin targets (site → HA port 8123)
-- Dashboard shows "Remote Access: Not configured"
+| Pangolin account | External | ⬜ | Create account on app.pangolin.net |
+| Pangolin API integration | Connect API | ⬜ | Create newt + site on claim |
+| Real credentials storage | PostgreSQL | ⬜ | Store in installations table |
+| Config sync update | KaliunBox | ✅ | Already fetches pangolin config |
+| Newt connection | KaliunBox | ✅ | Container ready, needs real creds |
+| HA trusted_proxies | KaliunBox | ✅ | Dynamic proxy config implemented |
+| Dashboard button | Frontend | ⬜ | "Access Home Assistant" link |
+| Remote access status | Frontend | ⬜ | Show connected/disconnected |
 
 ---
 

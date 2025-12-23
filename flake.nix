@@ -47,6 +47,7 @@
           ./modules/newt-container.nix
           ./modules/management-screen.nix
           ./modules/health-reporter.nix
+          ./modules/log-reporter.nix
           ./modules/auto-update.nix
           ./modules/connect-sync.nix
           ./modules/boot-health-check.nix
