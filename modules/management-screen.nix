@@ -119,6 +119,29 @@
 
     # Get KaliunBox version from NixOS
     KALIUNBOX_VERSION=$(cat /run/current-system/nixos-version 2>/dev/null || echo "unknown")
+    
+    # Get flake revision (git commit)
+    KALIUN_VERSION=""
+    if [ -d /etc/nixos/kaliunbox-flake/.git ]; then
+      KALIUN_VERSION=$(cd /etc/nixos/kaliunbox-flake && ${pkgs.git}/bin/git rev-parse --short HEAD 2>/dev/null || echo "")
+    fi
+    
+    # Get last update status
+    LAST_UPDATE=""
+    if [ -f /var/lib/kaliun/last_rebuild ]; then
+      LAST_UPDATE_TS=$(${pkgs.coreutils}/bin/stat -c %Y /var/lib/kaliun/last_rebuild 2>/dev/null)
+      if [ -n "$LAST_UPDATE_TS" ]; then
+        LAST_UPDATE_TIME=$(${pkgs.coreutils}/bin/date -d "@$LAST_UPDATE_TS" "+%Y-%m-%d %H:%M" 2>/dev/null || echo "")
+      fi
+      UPDATE_RESULT=$(cat /var/lib/kaliun/last_rebuild 2>/dev/null || echo "")
+      if [ "$UPDATE_RESULT" = "success" ]; then
+        LAST_UPDATE="$LAST_UPDATE_TIME ''${GREEN}✓''${RESET}"
+      elif [ "$UPDATE_RESULT" = "failed" ]; then
+        LAST_UPDATE="$LAST_UPDATE_TIME ''${RED}✗''${RESET}"
+      elif [ "$UPDATE_RESULT" = "skipped" ]; then
+        LAST_UPDATE="$LAST_UPDATE_TIME ''${YELLOW}-''${RESET}"
+      fi
+    fi
 
     # Now clear screen and display everything at once
     ${pkgs.ncurses}/bin/tput clear
@@ -139,6 +162,12 @@
       echo "    Load:       $LOAD"
       echo "    Memory:     $MEM_USED / $MEM_TOTAL"
       echo "    KaliunBox:  $KALIUNBOX_VERSION"
+      if [ -n "$KALIUN_VERSION" ]; then
+        echo "    Kaliun:     $KALIUN_VERSION"
+      fi
+      if [ -n "$LAST_UPDATE" ]; then
+        echo -e "    Updated:    $LAST_UPDATE"
+      fi
       echo ""
       echo -e "  ''${BOLD}Services:''${RESET}"
       echo -e "    Home Assistant:  $HA_STATUS"
