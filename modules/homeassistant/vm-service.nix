@@ -195,6 +195,13 @@ in {
               echo "Skipping USB passthrough in nested VM environment"
             fi
 
+            # Determine CPU model - use 'host' with KVM, fall back to 'qemu64' for software emulation
+            CPU_MODEL="host"
+            if [ ! -e /dev/kvm ] || [ ! -r /dev/kvm ]; then
+              echo "KVM not available - using qemu64 CPU for software emulation (slower)"
+              CPU_MODEL="qemu64"
+            fi
+
             # Common QEMU args
             QEMU_ARGS=(
               -name homeassistant
@@ -205,7 +212,7 @@ in {
       }
               -m 4096
               -smp $(nproc)
-              -cpu host
+              -cpu $CPU_MODEL
               -drive if=pflash,format=raw,readonly=on,file=${haConfig.uefiCodePath}
               -drive if=pflash,format=raw,file=/var/lib/havm/efivars.fd
               -drive file=${haConfig.haosImagePath},if=virtio,format=${haConfig.haosFormat},cache=writeback
@@ -266,15 +273,6 @@ in {
                 fi
                 if [ $i -eq 60 ]; then
                   echo "WARNING: $IFACE did not get IP after 60s, proceeding anyway"
-                fi
-                sleep 1
-              done
-
-              # Brief wait for DHCP-provided DNS (to preserve private/local DNS if available)
-              # NixOS networking.nameservers provides fallback, so this is best-effort
-              for i in $(seq 1 5); do
-                if ${pkgs.gnugrep}/bin/grep -q '^nameserver' /etc/resolv.conf 2>/dev/null; then
-                  break
                 fi
                 sleep 1
               done

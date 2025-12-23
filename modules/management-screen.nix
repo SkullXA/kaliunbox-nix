@@ -211,12 +211,16 @@
     attempts=0
     while true; do
       # Check if we have any non-loopback IP address
-      HAS_IP=$(${pkgs.iproute2}/bin/ip -4 addr show scope global 2>/dev/null | ${pkgs.gnugrep}/bin/grep -c 'inet ' || echo "0")
+      HAS_IP=$(${pkgs.iproute2}/bin/ip -4 addr show scope global 2>/dev/null | ${pkgs.gnugrep}/bin/grep -c 'inet ' 2>/dev/null || echo "0")
+      # Ensure HAS_IP is a valid integer (strip any whitespace/newlines)
+      HAS_IP=$(echo "$HAS_IP" | ${pkgs.coreutils}/bin/tr -d '[:space:]')
+      [ -z "$HAS_IP" ] && HAS_IP=0
+      
       # Also try the route check (works on bare metal)
       HAS_ROUTE=false
       ${pkgs.iproute2}/bin/ip route get 1.1.1.1 &>/dev/null && HAS_ROUTE=true
 
-      if [ "$HAS_IP" -gt 0 ] || [ "$HAS_ROUTE" = "true" ]; then
+      if [ "$HAS_IP" -gt 0 ] 2>/dev/null || [ "$HAS_ROUTE" = "true" ]; then
         break
       fi
 
