@@ -4,6 +4,17 @@
 
 **Last Updated**: December 23, 2025
 
+---
+
+## 🔴 TODO / Bugs to Fix
+
+| Priority | Item | Description |
+|----------|------|-------------|
+| 🟡 Medium | Email Service | Configure SMTP for Gotrue Auth OR enable `GOTRUE_MAILER_AUTOCONFIRM=true` |
+| 🟢 Low | Email Registration | Currently requires email confirmation - code fix added but needs SMTP setup |
+| 🟢 Low | Debug Panel | Added to Settings page - remove before production |
+| 🟢 Low | Local Dev Mode | Clean up `isLocalDev` checks and localhost testing code |
+
 Your KaliunBox is successfully:
 - ✅ Claiming devices via QR code
 - ✅ Installing NixOS + Home Assistant OS VM
