@@ -178,13 +178,26 @@
     #!${pkgs.bash}/bin/bash
 
     # Wait for network to be ready before showing status
+    # Check both route and actual interface IP for nested VM compatibility
     attempts=0
-    while ! ${pkgs.iproute2}/bin/ip route get 1.1.1.1 &>/dev/null; do
+    while true; do
+      # Check if we have any non-loopback IP address
+      HAS_IP=$(${pkgs.iproute2}/bin/ip -4 addr show scope global 2>/dev/null | ${pkgs.gnugrep}/bin/grep -c 'inet ' || echo "0")
+      # Also try the route check (works on bare metal)
+      HAS_ROUTE=false
+      ${pkgs.iproute2}/bin/ip route get 1.1.1.1 &>/dev/null && HAS_ROUTE=true
+
+      if [ "$HAS_IP" -gt 0 ] || [ "$HAS_ROUTE" = "true" ]; then
+        break
+      fi
+
       printf "\r  Waiting for network... "
       sleep 1
       attempts=$((attempts + 1))
       # Timeout after 60 seconds
       if [ $attempts -ge 60 ]; then
+        echo ""
+        echo "  Network timeout - proceeding anyway"
         break
       fi
     done

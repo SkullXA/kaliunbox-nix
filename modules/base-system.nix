@@ -22,9 +22,18 @@
     };
   };
 
-  # Simple network configuration - just use DHCP
-  # On bare metal, the Home Assistant VM will use macvtap to get its own IP from the network's DHCP
-  networking.useDHCP = lib.mkDefault true;
+  # Network configuration
+  # - DHCP for automatic IP assignment
+  # - resolvconf to manage /etc/resolv.conf (allows bridge setup to preserve DHCP DNS)
+  # - Fallback DNS servers for when DHCP DNS is lost (e.g., during bridge setup)
+  # Note: On restricted networks that block public DNS, DHCP-provided DNS is
+  # preserved at bridge setup time via resolvconf. However, DNS won't refresh
+  # after setup since br-haos is denied in dhcpcd.denyInterfaces.
+  networking = {
+    useDHCP = lib.mkDefault true;
+    resolvconf.enable = true;
+    nameservers = ["1.1.1.1" "8.8.8.8"];
+  };
 
   # Shell aliases and helper functions
   programs.bash.interactiveShellInit = ''

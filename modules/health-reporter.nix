@@ -13,7 +13,7 @@
 
     CONFIG_FILE="/var/lib/kaliun/config.json"
     INSTALL_ID=$(cat /var/lib/kaliun/install_id 2>/dev/null || echo "unknown")
-    CONNECT_API_URL=$(cat /var/lib/kaliun/connect_api_url 2>/dev/null || echo "https://connect.kaliun.com")
+    CONNECT_API_URL=$(cat /var/lib/kaliun/connect_api_url 2>/dev/null || echo "https://kaliun-connect-api-production.up.railway.app")
 
     if [ ! -f "$CONFIG_FILE" ]; then
       echo "ERROR: Configuration file not found"
@@ -210,6 +210,16 @@
     KNOWN_GOOD_GEN=$(cat /var/lib/kaliun/known_good_generation 2>/dev/null || echo "")
     ROLLBACK_ATTEMPTS=$(cat /var/lib/kaliun/rollback_attempts 2>/dev/null || echo "0")
 
+    # Network watchdog status
+    NETWORK_WATCHDOG_FAILURES=$(cat /var/lib/kaliun/network_failure_count 2>/dev/null || echo "0")
+    NETWORK_WATCHDOG_LAST_ROLLBACK=""
+    if [ -f /var/lib/kaliun/network_watchdog_last_rollback ]; then
+      NETWORK_ROLLBACK_TS=$(cat /var/lib/kaliun/network_watchdog_last_rollback)
+      if [ -n "$NETWORK_ROLLBACK_TS" ] && [ "$NETWORK_ROLLBACK_TS" != "0" ]; then
+        NETWORK_WATCHDOG_LAST_ROLLBACK=$(${pkgs.coreutils}/bin/date -u -d "@$NETWORK_ROLLBACK_TS" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo "")
+      fi
+    fi
+
     # Build JSON payload
     PAYLOAD=$(${pkgs.jq}/bin/jq -n \
       --argjson uptime "$UPTIME_SECONDS" \
@@ -246,6 +256,8 @@
       --arg boot_health_status "$BOOT_HEALTH_STATUS" \
       --arg known_good_gen "$KNOWN_GOOD_GEN" \
       --argjson rollback_attempts "$ROLLBACK_ATTEMPTS" \
+      --argjson network_watchdog_failures "$NETWORK_WATCHDOG_FAILURES" \
+      --arg network_watchdog_last_rollback "$NETWORK_WATCHDOG_LAST_ROLLBACK" \
       '{
         uptime_seconds: $uptime,
         memory: {
@@ -290,7 +302,9 @@
           healthy: $newt_healthy
         },
         network: {
-          host_ip: $host_ip
+          host_ip: $host_ip,
+          watchdog_failures: $network_watchdog_failures,
+          watchdog_last_rollback: (if $network_watchdog_last_rollback == "" then null else $network_watchdog_last_rollback end)
         },
         failed_units: $failed_units
       }')

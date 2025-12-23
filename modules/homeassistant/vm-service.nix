@@ -270,6 +270,15 @@ in {
                 sleep 1
               done
 
+              # Brief wait for DHCP-provided DNS (to preserve private/local DNS if available)
+              # NixOS networking.nameservers provides fallback, so this is best-effort
+              for i in $(seq 1 5); do
+                if ${pkgs.gnugrep}/bin/grep -q '^nameserver' /etc/resolv.conf 2>/dev/null; then
+                  break
+                fi
+                sleep 1
+              done
+
               # Setup bridge and get tap device name
               TAP_DEV=$(${networking.setupBridge} "$IFACE")
               echo "Using tap device: $TAP_DEV"

@@ -104,7 +104,28 @@ in {
 
     (pkgs.writeScriptBin "ha" ''
       #!${pkgs.bash}/bin/bash
+      # Wrapper for Home Assistant CLI - executes 'ha' commands inside the HAOS VM
+      exec havm-exec /usr/bin/ha "$@"
+    '')
+
+    (pkgs.writeScriptBin "havm-exec" ''
+      #!${pkgs.bash}/bin/bash
       set -euo pipefail
+
+      # Execute arbitrary commands inside the Home Assistant VM via QEMU Guest Agent
+      # Uses /bin/sh -c to allow PATH resolution for commands
+
+      if [ $# -lt 1 ]; then
+        echo "Usage: havm-exec <command> [args...]" >&2
+        echo "" >&2
+        echo "Execute commands inside the Home Assistant VM." >&2
+        echo "" >&2
+        echo "Examples:" >&2
+        echo "  havm-exec cat /mnt/data/supervisor/homeassistant/configuration.yaml" >&2
+        echo "  havm-exec ls -la /mnt/data/supervisor/homeassistant" >&2
+        echo "  havm-exec ha core info" >&2
+        exit 1
+      fi
 
       QGA_SOCK="/var/lib/havm/qga.sock"
 
@@ -113,20 +134,21 @@ in {
         exit 1
       fi
 
-      # Build JSON array of arguments
-      ARGS_JSON="["
-      first=true
+      # Build the full command string for sh -c
+      # We need to properly escape for shell execution
+      CMD_STRING=""
+      SQ="'"
       for arg in "$@"; do
-        if [ "$first" = true ]; then
-          first=false
-        else
-          ARGS_JSON+=","
+        if [ -n "$CMD_STRING" ]; then
+          CMD_STRING+=" "
         fi
-        # Escape quotes in argument
-        escaped_arg=$(echo "$arg" | ${pkgs.gnused}/bin/sed 's/\\/\\\\/g; s/"/\\"/g')
-        ARGS_JSON+="\"$escaped_arg\""
+        # Single-quote each argument, escaping embedded single quotes
+        escaped_arg=$(printf '%s' "$arg" | ${pkgs.gnused}/bin/sed "s/$SQ/$SQ\\\\$SQ$SQ/g")
+        CMD_STRING+="$SQ$escaped_arg$SQ"
       done
-      ARGS_JSON+="]"
+
+      # JSON-escape the command string for the QGA request
+      CMD_JSON=$(printf '%s' "$CMD_STRING" | ${pkgs.jq}/bin/jq -Rs .)
 
       # First check if guest agent is responding
       PING_RESPONSE=$({ echo '{"execute":"guest-ping"}'; sleep 2; } | \
@@ -138,8 +160,8 @@ in {
         exit 1
       fi
 
-      # Execute command via guest agent
-      EXEC_RESPONSE=$({ echo "{\"execute\":\"guest-exec\",\"arguments\":{\"path\":\"/usr/bin/ha\",\"arg\":$ARGS_JSON,\"capture-output\":true}}"; sleep 2; } | \
+      # Execute command via guest agent using /bin/sh -c for PATH resolution
+      EXEC_RESPONSE=$({ echo "{\"execute\":\"guest-exec\",\"arguments\":{\"path\":\"/bin/sh\",\"arg\":[\"-c\",$CMD_JSON],\"capture-output\":true}}"; sleep 2; } | \
         timeout 10 ${pkgs.socat}/bin/socat - UNIX-CONNECT:"$QGA_SOCK" 2>/dev/null | head -1)
 
       PID=$(echo "$EXEC_RESPONSE" | ${pkgs.jq}/bin/jq -r '.return.pid // empty' 2>/dev/null)

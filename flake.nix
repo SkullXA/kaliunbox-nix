@@ -50,6 +50,7 @@
           ./modules/auto-update.nix
           ./modules/connect-sync.nix
           ./modules/boot-health-check.nix
+          ./modules/network-watchdog.nix
           # Apply custom package overlay
           {nixpkgs.overlays = [self.overlays.default];}
         ];

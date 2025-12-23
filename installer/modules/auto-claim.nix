@@ -222,11 +222,11 @@
     echo ""
     echo "=== Installation Complete ==="
     echo ""
-    echo "Rebooting in 3 seconds..."
-    echo "Remove installation media now."
+    echo "Please remove the installation media (USB key)"
+    echo "and press Enter to reboot..."
     echo ""
 
-    sleep 3
+    read -r
     ${pkgs.systemd}/bin/reboot
   '';
 

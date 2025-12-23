@@ -60,9 +60,10 @@
 
     # Add physical interface to bridge (if not already)
     if ! ${pkgs.iproute2}/bin/ip link show master "$BRIDGE_NAME" | ${pkgs.gnugrep}/bin/grep -q "$IFACE"; then
-      # Save current DNS servers before releasing DHCP lease
-      # dhcpcd -k removes DNS entries from resolv.conf, so we need to restore them
-      SAVED_DNS=$(${pkgs.gnugrep}/bin/grep '^nameserver' /etc/resolv.conf 2>/dev/null || true)
+      # Save DNS servers before releasing the lease (snapshot of current resolv.conf)
+      # Note: This captures all nameservers including static ones from networking.nameservers
+      # Re-adding static servers is harmless; the important thing is preserving DHCP DNS
+      SAVED_DNS=$(${pkgs.gnugrep}/bin/grep '^nameserver' /etc/resolv.conf 2>/dev/null | ${pkgs.gawk}/bin/awk '{print $2}' || true)
 
       # Release DHCP lease on physical interface before adding to bridge
       # This prevents dhcpcd from requesting a new IP after we flush it
@@ -72,9 +73,14 @@
       ${pkgs.iproute2}/bin/ip addr flush dev "$IFACE" 2>/dev/null || true
       ${pkgs.iproute2}/bin/ip link set "$IFACE" master "$BRIDGE_NAME"
 
-      # Restore DNS servers if they were lost
-      if [ -n "$SAVED_DNS" ] && ! ${pkgs.gnugrep}/bin/grep -q '^nameserver' /etc/resolv.conf 2>/dev/null; then
-        echo "$SAVED_DNS" >> /etc/resolv.conf
+      # Restore DHCP-provided DNS via resolvconf (proper interface, not direct file write)
+      # This preserves DNS from restricted networks that block public resolvers
+      if [ -n "$SAVED_DNS" ]; then
+        (
+          for dns in $SAVED_DNS; do
+            echo "nameserver $dns"
+          done
+        ) | ${pkgs.openresolv}/bin/resolvconf -a "$BRIDGE_NAME.bridge" || true
       fi
     fi
 

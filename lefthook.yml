@@ -14,9 +14,14 @@ pre-commit:
     lint:
       glob: "*.nix"
       run: |
+        output=""
         for file in {staged_files}; do
-          nix run nixpkgs#statix -- check "$file"
+          output+=$(nix run nixpkgs#statix -- check "$file" 2>&1)
         done
+        echo "$output"
+        if echo "$output" | grep -qE '\[(W|E)[0-9]+\]'; then
+          exit 1
+        fi
 
 pre-push:
   commands:

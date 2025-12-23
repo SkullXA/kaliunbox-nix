@@ -13,8 +13,16 @@
         LAST_CHECK_FILE="$STATE_DIR/last_update_check"
         LAST_REBUILD_FILE="$STATE_DIR/last_rebuild"
         LOCK_FILE="$STATE_DIR/auto-update.lock"
+        WATCHDOG_PAUSE_FILE="$STATE_DIR/network_watchdog_paused"
 
         mkdir -p "$STATE_DIR"
+
+        # Pause network watchdog during update (cleanup on exit)
+        cleanup_watchdog_pause() {
+          rm -f "$WATCHDOG_PAUSE_FILE"
+        }
+        trap cleanup_watchdog_pause EXIT
+        touch "$WATCHDOG_PAUSE_FILE"
 
         echo "=== Starting KaliunBox Auto-Update ==="
 
