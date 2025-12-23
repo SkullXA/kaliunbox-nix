@@ -13,7 +13,7 @@ if [[ -z "${BATS_TEST_DIRNAME:-}" ]] && command -v systemd-cat &>/dev/null; then
 fi
 
 # Configuration (allow overrides for testing)
-CONNECT_API_URL="${CONNECT_API_URL:-https://connect.kaliun.com}"
+CONNECT_API_URL="${CONNECT_API_URL:-https://kaliun-connect-api-production.up.railway.app}"
 STATE_DIR="${STATE_DIR:-/var/lib/kaliun}"
 CONFIG_FILE="${CONFIG_FILE:-$STATE_DIR/config.json}"
 INSTALL_ID_FILE="${INSTALL_ID_FILE:-$STATE_DIR/install_id}"
@@ -31,7 +31,7 @@ if [[ ! -d "$STATE_DIR" ]]; then
 fi
 
 # Persist custom API URL for other services
-if [ "$CONNECT_API_URL" != "https://connect.kaliun.com" ]; then
+if [ "$CONNECT_API_URL" != "https://kaliun-connect-api-production.up.railway.app" ]; then
     echo "$CONNECT_API_URL" > "$API_URL_FILE"
     chmod 600 "$API_URL_FILE"
 fi

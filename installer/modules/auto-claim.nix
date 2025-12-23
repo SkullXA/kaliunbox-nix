@@ -12,7 +12,7 @@
   connectApiUrl =
     if devMode
     then builtins.getEnv "KALIUNBOX_API_URL"
-    else "https://connect.kaliun.com";
+    else "https://kaliun-connect-api-production.up.railway.app";
 
   # Script to wait for network and show connection status
   waitForNetwork =

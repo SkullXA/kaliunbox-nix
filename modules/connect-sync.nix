@@ -13,7 +13,7 @@
     set -euo pipefail
 
     CONFIG_FILE="${configFile}"
-    CONNECT_API_URL=$(cat ${connectApiUrlFile} 2>/dev/null || echo "https://connect.kaliun.com")
+    CONNECT_API_URL=$(cat ${connectApiUrlFile} 2>/dev/null || echo "https://kaliun-connect-api-production.up.railway.app")
 
     if [ ! -f "$CONFIG_FILE" ]; then
       echo "No config file found, skipping token refresh"
@@ -87,7 +87,7 @@
 
     CONFIG_FILE="${configFile}"
     INSTALL_ID=$(cat ${installIdFile} 2>/dev/null || echo "")
-    CONNECT_API_URL=$(cat ${connectApiUrlFile} 2>/dev/null || echo "https://connect.kaliun.com")
+    CONNECT_API_URL=$(cat ${connectApiUrlFile} 2>/dev/null || echo "https://kaliun-connect-api-production.up.railway.app")
 
     if [ -z "$INSTALL_ID" ]; then
       echo "No install ID found, skipping config sync"

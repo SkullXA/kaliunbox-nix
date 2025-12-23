@@ -15,7 +15,7 @@
 
     # Configuration
     CONFIG_FILE="/var/lib/kaliun/config.json"
-    CONNECT_API_URL=$(cat /var/lib/kaliun/connect_api_url 2>/dev/null || echo "https://connect.kaliun.com")
+    CONNECT_API_URL=$(cat /var/lib/kaliun/connect_api_url 2>/dev/null || echo "https://kaliun-connect-api-production.up.railway.app")
     INSTALL_ID=$(cat /var/lib/kaliun/install_id 2>/dev/null || echo "unknown")
 
     # Colors
