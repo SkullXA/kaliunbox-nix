@@ -40,60 +40,24 @@ in {
     # Increase firmware partition for flake
     firmwareSize = 512;
 
-    # Populate firmware partition (extends the default from sd-image-aarch64-installer)
-    populateFirmwareCommands = let
-      configTxt = pkgs.writeText "config.txt" ''
-        # Raspberry Pi 4 configuration for KaliunBox
-        arm_64bit=1
-        enable_uart=1
-        avoid_warnings=1
-        
-        # Enable audio
-        dtparam=audio=on
-        
-        # GPU memory (minimal for headless)
-        gpu_mem=16
-        
-        # Disable Bluetooth on UART
-        dtoverlay=disable-bt
-      '';
-    in lib.mkAfter ''
-      # Copy our custom config.txt
-      cp ${configTxt} firmware/config.txt
-      
-      # Copy kaliunbox flake to firmware partition
+    # Extend default firmware commands - just add the flake, don't touch boot config
+    populateFirmwareCommands = lib.mkAfter ''
+      # Copy kaliunbox flake to firmware partition for installer access
       mkdir -p firmware/kaliunbox-flake
-      cp -r ${flakeBundle}/. firmware/kaliunbox-flake/
+      cp -rf ${flakeBundle}/. firmware/kaliunbox-flake/
     '';
   };
 
-  # Boot configuration for Raspberry Pi 4
+  # Boot configuration - let parent module handle most of it
   boot = {
-    # Use mainline kernel with Pi 4 support
-    kernelPackages = pkgs.linuxPackages_latest;
-    
+    # Add console for debugging
     kernelParams = [
       "console=ttyS0,115200"
       "console=tty1"
-      "cma=128M"
     ];
 
-    # Use extlinux for U-Boot
-    loader = {
-      grub.enable = false;
-      generic-extlinux-compatible.enable = true;
-      timeout = 3;
-    };
-
-    # Initial ramdisk modules
-    initrd.availableKernelModules = [
-      "usbhid"
-      "usb_storage"
-      "vc4"
-      "bcm2835_dma"
-      "i2c_bcm2835"
-      "sdhci_iproc"
-    ];
+    # Ensure grub is disabled (use U-Boot/extlinux from parent)
+    loader.grub.enable = false;
   };
 
   # Hardware
