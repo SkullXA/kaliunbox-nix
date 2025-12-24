@@ -127,6 +127,20 @@ in {
             description = "Newt Agent Health Check";
             serviceConfig.Type = "oneshot";
             script = ''
+              # This health check is meant to be informational; it should not spam failures when Newt
+              # is simply not configured yet (common during early setup).
+              if [ ! -f /var/lib/kaliun/config.json ]; then
+                exit 0
+              fi
+
+              NEWT_ID=$(${pkgs.jq}/bin/jq -r '.pangolin.newt_id // empty' /var/lib/kaliun/config.json 2>/dev/null || echo "")
+              NEWT_SECRET=$(${pkgs.jq}/bin/jq -r '.pangolin.newt_secret // empty' /var/lib/kaliun/config.json 2>/dev/null || echo "")
+              PANGOLIN_ENDPOINT=$(${pkgs.jq}/bin/jq -r '.pangolin.endpoint // empty' /var/lib/kaliun/config.json 2>/dev/null || echo "")
+              if [ -z "$NEWT_ID" ] || [ -z "$NEWT_SECRET" ] || [ -z "$PANGOLIN_ENDPOINT" ]; then
+                # Not configured yet
+                exit 0
+              fi
+
               if systemctl is-active --quiet newt-agent.service; then
                 test -f /var/lib/newt/health
               else

@@ -12,6 +12,7 @@
 in {
   imports = [
     ./vm-service.nix
+    ./image-ensure.nix
     ./proxy-setup.nix
     ./info-fetcher.nix
     ./scripts.nix
@@ -36,14 +37,15 @@ in {
       if [ ! -f "${haConfig.haosImagePath}" ] || [ ! -s "${haConfig.haosImagePath}" ]; then
         echo "Downloading Home Assistant OS ${haConfig.haosVersion}..."
         mkdir -p $(dirname "${haConfig.haosImagePath}")
-        rm -f "${haConfig.haosImagePath}" "${haConfig.haosImagePath}.tmp"
+        rm -f "${haConfig.haosImagePath}" "${haConfig.haosImagePath}.tmp" "${haConfig.haosImagePath}.xz"
 
         # Fresh image means HA needs to reinitialize - delete the initialization marker
         rm -f /var/lib/havm/ha_initialized
 
         # Download to temp file first, then decompress
         # xz -d removes .xz extension automatically, producing ${haConfig.haosImagePath}
-        if ${pkgs.curl}/bin/curl --fail --cacert ${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt -L -o "${haConfig.haosImagePath}.xz" "${haConfig.haosUrl}"; then
+        # Note: activation output is only visible during nixos-rebuild; runtime boot logs come from the VM service.
+        if ${pkgs.curl}/bin/curl --fail --show-error --cacert ${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt -L -o "${haConfig.haosImagePath}.xz" "${haConfig.haosUrl}"; then
           ${pkgs.xz}/bin/xz -d "${haConfig.haosImagePath}.xz"
         else
           echo "ERROR: Failed to download Home Assistant OS image"

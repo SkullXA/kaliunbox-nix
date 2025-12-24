@@ -223,9 +223,19 @@ in {
               -drive file=${haConfig.haosImagePath},if=virtio,format=${haConfig.haosFormat},cache=writeback
               # Startup disk with fallback boot script (UEFI shell auto-executes startup.nsh)
               -drive file=/var/lib/havm/startup.img,if=virtio,format=raw,readonly=on
-              # Serial console for headless operation
-              -chardev socket,path=/var/lib/havm/console.sock,server=on,wait=off,id=serial0
-              -serial chardev:serial0
+              # Serial console:
+              # - aarch64: keep a socket for interactive console access (homeassistant-console uses it)
+              # - x86: send guest serial to journald via stdio so we can see HAOS boot/progress in logs
+              ${
+                if haConfig.isAarch64
+                then ''
+                  -chardev socket,path=/var/lib/havm/console.sock,server=on,wait=off,id=serial0
+                  -serial chardev:serial0
+                ''
+                else ''
+                  -serial stdio
+                ''
+              }
               # QMP socket for machine control (used for graceful shutdown)
               -qmp unix:/var/lib/havm/qmp.sock,server,nowait
               # Guest agent for VM management

@@ -30,6 +30,10 @@
     # Services to collect logs from
     SERVICES=(
       "homeassistant-vm.service"
+      "homeassistant-info-fetcher.service"
+      "homeassistant-proxy-setup.service"
+      "homeassistant-health-check.service"
+      "homeassistant-watchdog.service"
       "container@newt-agent.service"
       "kaliun-health-reporter.service"
       "kaliun-auto-update.service"
