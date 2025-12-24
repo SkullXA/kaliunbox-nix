@@ -100,7 +100,9 @@
           else "info"
           end
         ),
-        service: (._SYSTEMD_UNIT // "system"),
+        # Prefer systemd unit name, fall back to syslog identifier so we still categorize logs correctly
+        # (some stdout logs can lack _SYSTEMD_UNIT depending on how they are emitted/forwarded).
+        service: (._SYSTEMD_UNIT // .SYSLOG_IDENTIFIER // "system"),
         message: .MESSAGE
       }] | unique_by(.timestamp + .message) | sort_by(.timestamp) | .[-500:]
     ' 2>/dev/null || echo "[]")
@@ -177,3 +179,4 @@ in {
   };
 }
 
+AUTH_TOKEN

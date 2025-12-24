@@ -13,12 +13,26 @@
     IMG="${haConfig.haosImagePath}"
     URL="${haConfig.haosUrl}"
     TMP_XZ="''${IMG}.xz.part"
+    MIN_BYTES=$((512 * 1024 * 1024))  # 512MB sanity check to catch partial/corrupt downloads
 
     mkdir -p "$(dirname "$IMG")"
 
     if [ -f "$IMG" ] && [ -s "$IMG" ]; then
-      echo "HAOS image present: $IMG ($(stat -c%s "$IMG" 2>/dev/null || echo "?") bytes)"
-      exit 0
+      SIZE=$(stat -c%s "$IMG" 2>/dev/null || echo "0")
+      echo "HAOS image found: $IMG (''${SIZE} bytes)"
+
+      # Detect common failure mode: user powers off mid-download → a small/invalid qcow2 remains,
+      # VM boots into maintenance mode and never becomes reachable.
+      if [ "$SIZE" -lt "$MIN_BYTES" ]; then
+        echo "HAOS image looks too small (<512MB). Treating as corrupt and re-downloading."
+      elif ! ${pkgs.qemu}/bin/qemu-img info "$IMG" >/dev/null 2>&1; then
+        echo "HAOS image is not a valid qcow2 (qemu-img info failed). Re-downloading."
+      else
+        echo "HAOS image validated (qemu-img info OK)."
+        exit 0
+      fi
+
+      rm -f "$IMG"
     fi
 
     echo "HAOS image missing; downloading ${haConfig.haosVersion} from:"
@@ -45,6 +59,18 @@
     done
 
     wait "$CURL_PID"
+    CURL_EXIT=$?
+
+    if [ "$CURL_EXIT" -ne 0 ]; then
+      echo "ERROR: Download failed (exit code $CURL_EXIT)"
+      rm -f "$TMP_XZ"
+      exit 1
+    fi
+
+    if [ ! -f "$TMP_XZ" ] || [ ! -s "$TMP_XZ" ]; then
+      echo "ERROR: Download file missing or empty"
+      exit 1
+    fi
 
     mv "$TMP_XZ" "''${IMG}.xz"
     echo "Download complete; decompressing..."

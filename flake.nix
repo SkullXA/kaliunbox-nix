@@ -68,6 +68,18 @@
           {nixpkgs.overlays = [self.overlays.default];}
         ];
       };
+
+    # Helper to create Raspberry Pi 4 SD card image
+    mkRpi4System =
+      nixpkgs.lib.nixosSystem {
+        system = "aarch64-linux";
+        specialArgs = {inherit inputs;};
+        modules = [
+          ./installer/rpi4-image.nix
+          # Apply custom package overlay
+          {nixpkgs.overlays = [self.overlays.default];}
+        ];
+      };
   in {
     # Custom package overlay
     overlays.default = final: prev: {
@@ -84,6 +96,9 @@
       # aarch64 configurations (development/testing)
       kaliunbox-aarch64 = mkKaliunboxSystem "aarch64-linux";
       kaliunbox-installer-aarch64 = mkInstallerSystem "aarch64-linux";
+
+      # Raspberry Pi 4 configuration
+      kaliunbox-rpi4 = mkRpi4System;
     };
 
     # Build outputs for both Linux architectures
@@ -109,6 +124,14 @@
         # Individual packages
         inherit (pkgs) fosrl-newt qrencode-large;
       }
+      // (
+        # Add Raspberry Pi 4 SD image only for aarch64-linux
+        if system == "aarch64-linux"
+        then {
+          rpi4-image = self.nixosConfigurations.kaliunbox-rpi4.config.system.build.sdImage;
+        }
+        else {}
+      )
     );
 
     # Development shell (all systems)

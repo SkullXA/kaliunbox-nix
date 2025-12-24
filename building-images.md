@@ -17,9 +17,17 @@ Both architectures are built and published by CI to https://downloads.selorahome
 - Any x86_64 system with UEFI boot
 
 ### ARM64 (aarch64)
+- Raspberry Pi 4 (8GB recommended, use SD card or USB SSD)
 - Raspberry Pi 5 (with NVMe for best performance)
 - ARM servers (Ampere, AWS Graviton)
 - Apple Silicon Macs (via UTM/Parallels for testing)
+
+### Raspberry Pi 4 (Native SD Image)
+For Raspberry Pi 4, use the dedicated SD card image (not the generic aarch64 ISO):
+```bash
+nix build .#packages.aarch64-linux.rpi4-image
+```
+This creates a `.img.zst` file that can be flashed directly to an SD card with native Pi 4 boot support.
 
 ## Building ISOs
 
