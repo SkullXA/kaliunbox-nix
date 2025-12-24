@@ -195,11 +195,16 @@ in {
               echo "Skipping USB passthrough in nested VM environment"
             fi
 
-            # Determine CPU model - use 'host' with KVM, fall back to 'qemu64' for software emulation
-            CPU_MODEL="host"
-            if [ ! -e /dev/kvm ] || [ ! -r /dev/kvm ]; then
-              echo "KVM not available - using qemu64 CPU for software emulation (slower)"
-              CPU_MODEL="qemu64"
+            # CPU model: always use qemu64 for maximum compatibility
+            # - Works with both KVM (fast) and TCG (software emulation)
+            # - 'host' CPU requires working KVM and fails in nested VMs
+            # - qemu64 with KVM is still very fast, just doesn't expose all CPU features
+            # The accel=kvm:tcg in -M will automatically try KVM first, fall back to TCG
+            CPU_MODEL="qemu64"
+            if [ -e /dev/kvm ] && [ -r /dev/kvm ]; then
+              echo "KVM device found - QEMU will try hardware acceleration"
+            else
+              echo "KVM not available - QEMU will use software emulation (TCG)"
             fi
 
             # Common QEMU args
