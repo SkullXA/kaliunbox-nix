@@ -53,7 +53,8 @@
 
   # Root user configuration
   users.users.root = {
-    hashedPassword = null; # No password for auto-login on tty1
+    # Empty string = passwordless login on local console (NOT via SSH)
+    initialHashedPassword = "";
     openssh.authorizedKeys.keys = [
       "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIH0KdFK3xI5pHa3aZYAmZq3w0uyixT+FpE1lIIyPMZq6"
     ];
