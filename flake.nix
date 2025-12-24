@@ -97,7 +97,7 @@
       kaliunbox-aarch64 = mkKaliunboxSystem "aarch64-linux";
       kaliunbox-installer-aarch64 = mkInstallerSystem "aarch64-linux";
 
-      # Raspberry Pi 4 configuration
+      # Raspberry Pi 4 SD card image
       kaliunbox-rpi4 = mkRpi4System;
     };
 
