@@ -40,16 +40,13 @@ in {
     # Increase firmware partition for flake
     firmwareSize = 512;
 
-    # Populate firmware partition
+    # Populate firmware partition (extends the default from sd-image-aarch64-installer)
     populateFirmwareCommands = let
       configTxt = pkgs.writeText "config.txt" ''
         # Raspberry Pi 4 configuration for KaliunBox
         arm_64bit=1
         enable_uart=1
         avoid_warnings=1
-        
-        # Boot kernel
-        kernel=u-boot-rpi4.bin
         
         # Enable audio
         dtparam=audio=on
@@ -60,10 +57,8 @@ in {
         # Disable Bluetooth on UART
         dtoverlay=disable-bt
       '';
-    in ''
-      ${config.sdImage.populateFirmwareCommands or ""}
-      
-      # Copy our config.txt
+    in lib.mkAfter ''
+      # Copy our custom config.txt
       cp ${configTxt} firmware/config.txt
       
       # Copy kaliunbox flake to firmware partition
@@ -136,8 +131,8 @@ in {
     settings.PermitRootLogin = "yes";
   };
 
-  # Default root password (change after install)
-  users.users.root.initialPassword = "kaliunbox";
+  # Allow passwordless root login for installer (matches other installer modules)
+  users.users.root.initialHashedPassword = lib.mkForce "";
 
   # Save space
   documentation.enable = false;
