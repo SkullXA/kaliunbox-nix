@@ -63,19 +63,11 @@ in {
   # Hardware
   hardware.enableRedistributableFirmware = true;
 
-  # Network - WiFi enabled for Pi (often no Ethernet available)
+  # Network - Ethernet only (WiFi not supported for KaliunBox)
   networking = {
     hostName = "kaliunbox-installer";
     useDHCP = true;
-    
-    # Enable WiFi via wpa_supplicant
-    wireless = {
-      enable = true;
-      # Allow imperative configuration (user can add networks at runtime)
-      userControlled.enable = true;
-    };
-    
-    # Disable NetworkManager (conflicts with wpa_supplicant)
+    wireless.enable = false;
     networkmanager.enable = lib.mkForce false;
   };
 
@@ -95,8 +87,6 @@ in {
     e2fsprogs
     util-linux
     usbutils
-    wpa_supplicant  # WiFi configuration
-    iw             # WiFi diagnostics
   ];
 
   # SSH for headless setup
