@@ -64,7 +64,9 @@
     parted -s "$DISK_PATH" -- mkpart primary 512MiB 100%
 
     # Determine partition names
-    if [[ "$DISK" =~ nvme ]]; then
+    # NVMe and MMC devices use 'p' prefix for partitions (nvme0n1p1, mmcblk1p1)
+    # SATA/USB/VirtIO devices don't (sda1, vda1)
+    if [[ "$DISK" =~ nvme|mmcblk|loop ]]; then
       BOOT_PART="''${DISK_PATH}p1"
       ROOT_PART="''${DISK_PATH}p2"
     else

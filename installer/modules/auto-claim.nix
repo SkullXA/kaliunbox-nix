@@ -194,17 +194,35 @@
     echo "Installing to: $DISK_PATH ($DISK_SIZE)"
     echo ""
 
-    # Unmount any existing partitions on the disk
+    # Unmount any existing partitions on the disk (more thorough approach)
     echo "Unmounting existing partitions..."
-    ${pkgs.util-linux}/bin/umount "$DISK_PATH"* 2>/dev/null || true
+    # First, find and unmount all partitions on this disk
+    for part in $(${pkgs.util-linux}/bin/lsblk -ln -o NAME "$DISK_PATH" 2>/dev/null | tail -n +2); do
+      echo "  Unmounting /dev/$part..."
+      ${pkgs.util-linux}/bin/umount -f "/dev/$part" 2>/dev/null || true
+    done
+    # Also try direct unmount patterns
+    ${pkgs.util-linux}/bin/umount -f "$DISK_PATH"?* 2>/dev/null || true
+    ${pkgs.util-linux}/bin/umount -f "$DISK_PATH"p* 2>/dev/null || true
+    
+    # Deactivate any swap on the disk
+    for part in $(${pkgs.util-linux}/bin/lsblk -ln -o NAME "$DISK_PATH" 2>/dev/null | tail -n +2); do
+      ${pkgs.util-linux}/bin/swapoff "/dev/$part" 2>/dev/null || true
+    done
+
+    # Force kernel to re-read partition table
+    echo "Releasing disk..."
+    ${pkgs.util-linux}/bin/blockdev --rereadpt "$DISK_PATH" 2>/dev/null || true
+    sleep 2
 
     # Wipe disk signatures
     echo "Wiping disk signatures..."
     ${pkgs.util-linux}/bin/wipefs -af "$DISK_PATH"
 
-    # Inform kernel of partition changes
-    ${pkgs.parted}/bin/partprobe "$DISK_PATH" || true
-    sleep 2
+    # Inform kernel of partition changes again
+    ${pkgs.util-linux}/bin/blockdev --rereadpt "$DISK_PATH" 2>/dev/null || true
+    ${pkgs.parted}/bin/partprobe "$DISK_PATH" 2>/dev/null || true
+    sleep 3
 
     # Partition the disk
     echo "Partitioning $DISK_PATH..."
@@ -218,7 +236,9 @@
     sleep 2
 
     # Determine partition names
-    if [[ "$DISK" =~ nvme ]]; then
+    # NVMe and MMC devices use 'p' prefix for partitions (nvme0n1p1, mmcblk1p1)
+    # SATA/USB/VirtIO devices don't (sda1, vda1)
+    if [[ "$DISK" =~ nvme|mmcblk|loop ]]; then
       BOOT_PART="''${DISK_PATH}p1"
       ROOT_PART="''${DISK_PATH}p2"
     else
