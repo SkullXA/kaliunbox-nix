@@ -71,13 +71,32 @@
     networkmanager.enable = lib.mkForce false;
   };
 
-  # Nix settings
-  nix.settings = {
-    experimental-features = ["nix-command" "flakes"];
-    download-buffer-size = 256 * 1024 * 1024;
+  # Nix settings (match x86/aarch64 configuration)
+  nix = {
+    package = pkgs.nixVersions.stable;
+    settings = {
+      experimental-features = ["nix-command" "flakes"];
+      download-buffer-size = 256 * 1024 * 1024;
+      auto-optimise-store = true;
+    };
+    gc = {
+      automatic = true;
+      dates = "weekly";
+      options = "--delete-older-than 30d";
+    };
   };
 
-  # Essential packages
+  # Time zone and locale (match x86/aarch64)
+  time.timeZone = "UTC";
+  i18n.defaultLocale = "en_US.UTF-8";
+
+  # Firewall (allow SSH + HA)
+  networking.firewall = {
+    enable = true;
+    allowedTCPPorts = [22 8123];
+  };
+
+  # Essential packages (match x86/aarch64)
   environment.systemPackages = with pkgs; [
     git
     curl
@@ -88,7 +107,17 @@
     jq
     qrencode
     ncurses
+    tmux
   ];
+
+  # Ensure kaliun directories exist (match x86/aarch64)
+  system.activationScripts.kaliunDirectories = ''
+    mkdir -p /var/lib/kaliun
+    chmod 755 /var/lib/kaliun
+    if [ -f /var/lib/kaliun/config.json ]; then
+      chmod 644 /var/lib/kaliun/config.json
+    fi
+  '';
 
   # SSH for remote access
   services.openssh = {
