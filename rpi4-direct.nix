@@ -160,46 +160,86 @@
       export CONFIG_FILE="/var/lib/kaliun/config.json"
       export INSTALL_ID_FILE="/var/lib/kaliun/install_id"
       
+      # Helper to output to tty1
+      out() {
+        echo "$@" > /dev/tty1
+      }
+      
       # Show boot screen
       ${pkgs.ncurses}/bin/tput clear > /dev/tty1
-      {
-        echo ""
-        echo ""
-        echo "  ========================================"
-        echo "  KaliunBox - Raspberry Pi"
-        echo "  ========================================"
-        echo ""
-        echo "  Waiting for network connection..."
-        echo ""
-      } > /dev/tty1
+      out ""
+      out ""
+      out "  ========================================"
+      out "  KaliunBox - Raspberry Pi"
+      out "  ========================================"
+      out ""
+      out "  Waiting for network connection..."
+      out ""
       
       # Wait for API to be reachable (network-online.target doesn't guarantee internet)
       until ${pkgs.curl}/bin/curl -s -m 5 "$CONNECT_API_URL/health" >/dev/null 2>&1; do
         sleep 2
       done
       
-      echo "  Network connected!" > /dev/tty1
+      out "  Network connected!"
       sleep 1
       
-      # Use the standard claiming script
+      # Override show_success to NOT say "Proceeding to installation" (Pi is already installed)
+      show_success() {
+          local config="$1"
+          local customer_name=$(echo "$config" | ${pkgs.jq}/bin/jq -r '.customer.name // "Unknown"')
+          local customer_contact=$(echo "$config" | ${pkgs.jq}/bin/jq -r '.customer.email // "Unknown"')
+          
+          ${pkgs.ncurses}/bin/tput clear > /dev/tty1
+          {
+              echo ""
+              echo ""
+              echo "  ========================================"
+              echo "  Device Claimed Successfully!"
+              echo "  ========================================"
+              echo ""
+              echo "  Customer: $customer_name"
+              echo "  Contact:  $customer_contact"
+              echo ""
+              echo ""
+              echo "  Finalizing setup..."
+              echo ""
+          } > /dev/tty1
+          sleep 2
+      }
+      
+      # Use the standard claiming script (our show_success override takes precedence)
       ${builtins.readFile ./installer/claiming/claim-script.sh}
       
       # After claiming succeeds, clone the flake repo for auto-updates
-      echo ""
-      echo "Setting up auto-update repository..."
+      out ""
+      out "  Setting up auto-update repository..."
       
       FLAKE_DIR="/etc/nixos/kaliunbox-flake"
       if [ ! -d "$FLAKE_DIR" ]; then
-        ${pkgs.git}/bin/git clone https://github.com/SkullXA/kaliunbox-nix.git "$FLAKE_DIR"
-        echo "Repository cloned successfully"
+        # Clone with timeout (60 seconds) to prevent hanging
+        if timeout 60 ${pkgs.git}/bin/git clone --depth 1 https://github.com/SkullXA/kaliunbox-nix.git "$FLAKE_DIR" 2>/dev/null; then
+          out "  Repository cloned successfully"
+        else
+          out "  Warning: Could not clone repository (will retry on next update)"
+        fi
+      else
+        out "  Repository already exists"
       fi
       
       # Store the flake target for this device (Pi uses kaliunbox-rpi4)
       echo "kaliunbox-rpi4" > "$STATE_DIR/flake_target"
-      echo "Flake target set to: kaliunbox-rpi4"
+      out "  Flake target: kaliunbox-rpi4"
       
-      echo ""
-      echo "First boot setup complete!"
+      out ""
+      out "  ========================================"
+      out "  First Boot Setup Complete!"
+      out "  ========================================"
+      out ""
+      out "  System will now start Home Assistant..."
+      out "  This may take a few minutes on first boot."
+      out ""
+      sleep 3
     '';
   };
 
