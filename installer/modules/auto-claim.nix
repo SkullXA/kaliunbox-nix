@@ -72,21 +72,193 @@
       fi
     ''
     else ''
-      # Production mode - wait for network with clean screen
+      # Production mode - wait for network with timeout and WiFi fallback
       ${pkgs.ncurses}/bin/tput clear > /dev/tty1
-      {
-        echo ""
-        echo ""
-        echo "  ========================================"
-        echo "  KaliunBox Installer"
-        echo "  ========================================"
-        echo ""
-        echo "  Initializing network connection..."
-        echo ""
-      } > /dev/tty1
-
-      until ${pkgs.curl}/bin/curl -s -m 5 ${connectApiUrl}/health >/dev/null 2>&1; do
+      
+      show_header() {
+        ${pkgs.ncurses}/bin/tput clear > /dev/tty1
+        {
+          echo ""
+          echo ""
+          echo "  ========================================"
+          echo "  KaliunBox Installer"
+          echo "  ========================================"
+          echo ""
+        } > /dev/tty1
+      }
+      
+      # WiFi setup function
+      setup_wifi() {
+        show_header
+        {
+          echo "  WiFi Setup"
+          echo "  ----------"
+          echo ""
+        } > /dev/tty1
+        
+        # Check if WiFi interface exists
+        WIFI_IFACE=$(${pkgs.iw}/bin/iw dev 2>/dev/null | ${pkgs.gnugrep}/bin/grep Interface | ${pkgs.gawk}/bin/awk '{print $2}' | head -1)
+        
+        if [ -z "$WIFI_IFACE" ]; then
+          {
+            echo "  ✗ No WiFi adapter detected"
+            echo ""
+            echo "  Please connect via Ethernet instead."
+            echo ""
+            echo "  Press Enter to retry connection..."
+          } > /dev/tty1
+          read < /dev/tty1
+          return 1
+        fi
+        
+        {
+          echo "  Found WiFi adapter: $WIFI_IFACE"
+          echo ""
+          echo "  Scanning for networks..."
+          echo ""
+        } > /dev/tty1
+        
+        # Bring up interface and scan
+        ${pkgs.iproute2}/bin/ip link set "$WIFI_IFACE" up 2>/dev/null
         sleep 2
+        
+        # Get list of networks
+        NETWORKS=$(${pkgs.iw}/bin/iw dev "$WIFI_IFACE" scan 2>/dev/null | ${pkgs.gnugrep}/bin/grep -E "SSID:" | ${pkgs.gnused}/bin/sed 's/.*SSID: //' | ${pkgs.gnugrep}/bin/grep -v "^$" | ${pkgs.coreutils}/bin/sort -u | ${pkgs.coreutils}/bin/head -10)
+        
+        if [ -z "$NETWORKS" ]; then
+          {
+            echo "  ✗ No WiFi networks found"
+            echo ""
+            echo "  Press Enter to retry..."
+          } > /dev/tty1
+          read < /dev/tty1
+          return 1
+        fi
+        
+        {
+          echo "  Available networks:"
+          echo ""
+          i=1
+          echo "$NETWORKS" | while read -r ssid; do
+            echo "    $i) $ssid"
+            i=$((i + 1))
+          done
+          echo ""
+          echo "  Enter network number (or type SSID manually):"
+        } > /dev/tty1
+        
+        read SELECTION < /dev/tty1
+        
+        # Check if selection is a number
+        if echo "$SELECTION" | ${pkgs.gnugrep}/bin/grep -qE '^[0-9]+$'; then
+          SSID=$(echo "$NETWORKS" | ${pkgs.gnused}/bin/sed -n "''${SELECTION}p")
+        else
+          SSID="$SELECTION"
+        fi
+        
+        if [ -z "$SSID" ]; then
+          echo "  Invalid selection" > /dev/tty1
+          sleep 2
+          return 1
+        fi
+        
+        {
+          echo ""
+          echo "  Enter password for '$SSID':"
+        } > /dev/tty1
+        
+        read -s PASSWORD < /dev/tty1
+        
+        {
+          echo ""
+          echo "  Connecting to '$SSID'..."
+        } > /dev/tty1
+        
+        # Create wpa_supplicant config
+        ${pkgs.coreutils}/bin/mkdir -p /etc/wpa_supplicant
+        ${pkgs.wpa_supplicant}/bin/wpa_passphrase "$SSID" "$PASSWORD" > /etc/wpa_supplicant/wpa_supplicant.conf 2>/dev/null
+        
+        # Kill any existing wpa_supplicant
+        ${pkgs.procps}/bin/pkill wpa_supplicant 2>/dev/null || true
+        sleep 1
+        
+        # Start wpa_supplicant
+        ${pkgs.wpa_supplicant}/bin/wpa_supplicant -B -i "$WIFI_IFACE" -c /etc/wpa_supplicant/wpa_supplicant.conf 2>/dev/null
+        
+        # Wait for connection
+        sleep 3
+        
+        # Get IP via DHCP
+        ${pkgs.dhcpcd}/bin/dhcpcd -w "$WIFI_IFACE" 2>/dev/null &
+        sleep 5
+        
+        # Check if we got an IP
+        if ${pkgs.iproute2}/bin/ip addr show "$WIFI_IFACE" | ${pkgs.gnugrep}/bin/grep -q "inet "; then
+          echo "  ✓ WiFi connected!" > /dev/tty1
+          sleep 2
+          return 0
+        else
+          echo "  ✗ Failed to connect. Check password." > /dev/tty1
+          sleep 3
+          return 1
+        fi
+      }
+      
+      show_header
+      echo "  Checking network connection..." > /dev/tty1
+      
+      # Try to connect with timeout
+      MAX_RETRIES=15
+      RETRY_COUNT=0
+      CONNECTED=false
+      
+      while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+        printf "\r  Attempt %d/%d..." "$((RETRY_COUNT + 1))" "$MAX_RETRIES" > /dev/tty1
+        
+        if ${pkgs.curl}/bin/curl -s -m 3 ${connectApiUrl}/health >/dev/null 2>&1; then
+          CONNECTED=true
+          printf "\r  ✓ Connected!                    \n" > /dev/tty1
+          break
+        fi
+        
+        RETRY_COUNT=$((RETRY_COUNT + 1))
+        sleep 2
+      done
+      
+      # If not connected, offer WiFi setup
+      while [ "$CONNECTED" = "false" ]; do
+        {
+          echo ""
+          echo ""
+          echo "  ✗ No internet connection detected"
+          echo ""
+          echo "  Options:"
+          echo "    1) Setup WiFi"
+          echo "    2) Retry connection (Ethernet)"
+          echo ""
+          echo "  Enter choice [1/2]:"
+        } > /dev/tty1
+        
+        read CHOICE < /dev/tty1
+        
+        case "$CHOICE" in
+          1)
+            setup_wifi
+            ;;
+          2)
+            show_header
+            echo "  Retrying connection..." > /dev/tty1
+            ;;
+        esac
+        
+        # Check connection again
+        sleep 2
+        if ${pkgs.curl}/bin/curl -s -m 5 ${connectApiUrl}/health >/dev/null 2>&1; then
+          CONNECTED=true
+          show_header
+          echo "  ✓ Connected!" > /dev/tty1
+          sleep 2
+        fi
       done
     '';
 
@@ -267,6 +439,12 @@ in {
         coreutils
         gawk
         gnugrep
+        gnused
+        iw
+        iproute2
+        wpa_supplicant
+        dhcpcd
+        procps
       ];
       script = ''
         # Set Connect API URL
