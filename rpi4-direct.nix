@@ -108,15 +108,14 @@
     after = ["network-online.target"];
     wants = ["network-online.target"];
     
-    # Only run if not yet claimed
-    conditionPathExists = "!/var/lib/kaliun/config.json";
-    
     serviceConfig = {
       Type = "oneshot";
       RemainAfterExit = true;
       StandardOutput = "tty";
       StandardError = "tty";
       TTYPath = "/dev/tty1";
+      # Only run if not yet claimed (! means "if NOT exists")
+      ConditionPathExists = "!/var/lib/kaliun/config.json";
     };
     
     path = with pkgs; [curl jq qrencode util-linux coreutils ncurses git];
