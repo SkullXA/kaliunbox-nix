@@ -6,10 +6,17 @@
 }: let
   newtPackage = pkgs.fosrl-newt;
 in {
+  # Ensure /var/lib/kaliun exists before container starts (even before claiming)
+  systemd.tmpfiles.rules = [
+    "d /var/lib/kaliun 0700 root root -"
+  ];
+
   # Load wireguard and tun kernel modules on host
   boot.kernelModules = ["wireguard" "tun"];
 
   # NixOS container for Newt agent
+  # Note: Container won't start properly until config.json exists (after claiming)
+  # The bind mount will fail gracefully, and newt-agent service inside will exit
   containers.newt-agent = {
     autoStart = true;
     ephemeral = false;
@@ -21,9 +28,11 @@ in {
     enableTun = true;
 
     # Bind mounts
+    # Mount the directory (not the file) so container starts even before claiming
+    # The newt-agent service inside will handle missing config gracefully
     bindMounts = {
-      "/var/lib/kaliun/config.json" = {
-        hostPath = "/var/lib/kaliun/config.json";
+      "/var/lib/kaliun" = {
+        hostPath = "/var/lib/kaliun";
         isReadOnly = true;
       };
       # Bind mount newt binary from host

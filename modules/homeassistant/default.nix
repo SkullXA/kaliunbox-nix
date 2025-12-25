@@ -45,16 +45,21 @@ in {
         # Download to temp file first, then decompress
         # xz -d removes .xz extension automatically, producing ${haConfig.haosImagePath}
         # Note: activation output is only visible during nixos-rebuild; runtime boot logs come from the VM service.
+        # Don't exit on failure - network may not be ready yet (especially on first boot).
+        # The image-ensure service will retry the download when network is available.
         if ${pkgs.curl}/bin/curl --fail --show-error --cacert ${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt -L -o "${haConfig.haosImagePath}.xz" "${haConfig.haosUrl}"; then
           ${pkgs.xz}/bin/xz -d "${haConfig.haosImagePath}.xz"
         else
-          echo "ERROR: Failed to download Home Assistant OS image"
+          echo "WARNING: Failed to download Home Assistant OS image (network may not be ready)"
+          echo "The image will be downloaded when the VM service starts."
           rm -f "${haConfig.haosImagePath}.xz"
-          exit 1
         fi
       fi
-      chown havm:kvm "${haConfig.haosImagePath}"
-      chmod 660 "${haConfig.haosImagePath}"
+      # Only set permissions if file exists
+      if [ -f "${haConfig.haosImagePath}" ]; then
+        chown havm:kvm "${haConfig.haosImagePath}"
+        chmod 660 "${haConfig.haosImagePath}"
+      fi
     '';
 
     # Create directory for Home Assistant VM data

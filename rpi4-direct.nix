@@ -107,6 +107,9 @@
     wantedBy = ["multi-user.target"];
     after = ["network-online.target"];
     wants = ["network-online.target"];
+    # Prevent management-console from fighting for tty1 during claiming
+    conflicts = ["management-console.service"];
+    before = ["management-console.service"];
     
     serviceConfig = {
       Type = "oneshot";
@@ -114,6 +117,8 @@
       StandardOutput = "tty";
       StandardError = "tty";
       TTYPath = "/dev/tty1";
+      TTYReset = true;
+      TTYVHangup = true;
       # Only run if not yet claimed (! means "if NOT exists")
       ConditionPathExists = "!/var/lib/kaliun/config.json";
     };
