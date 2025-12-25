@@ -45,15 +45,16 @@
       grub.enable = false;
       generic-extlinux-compatible.enable = true;
     };
-    
-    # Console for debugging
+
+    # Console for debugging + KVM support
     kernelParams = [
       "console=ttyS0,115200"
       "console=tty1"
+      "kvm-arm.mode=nvhe"  # Enable KVM support for ARM
     ];
-    
+
     # Needed for KVM/QEMU virtualization on Pi
-    kernelModules = ["kvm-arm"];
+    kernelModules = ["kvm" "tun"];  # ARM64 uses generic kvm module + tun for VM networking
   };
 
   # Hardware support
@@ -244,6 +245,9 @@
       out "  Starting management console..."
       out ""
       sleep 2
+
+      # Explicitly start management console since 'conflicts' blocks it from auto-starting
+      ${pkgs.systemd}/bin/systemctl start management-console.service --no-block || true
     '';
   };
 

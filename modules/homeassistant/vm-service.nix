@@ -195,16 +195,18 @@ in {
               echo "Skipping USB passthrough in nested VM environment"
             fi
 
-            # CPU model: always use qemu64 for maximum compatibility
-            # - Works with both KVM (fast) and TCG (software emulation)
-            # - 'host' CPU requires working KVM and fails in nested VMs
-            # - qemu64 with KVM is still very fast, just doesn't expose all CPU features
-            # The accel=kvm:tcg in -M will automatically try KVM first, fall back to TCG
-            CPU_MODEL="qemu64"
+            # CPU model selection based on architecture
+            # - x86: qemu64 for compatibility (works with KVM and TCG)
+            # - ARM: host with KVM, or cortex-a72 (Pi 4 CPU) for TCG fallback
             if [ -e /dev/kvm ] && [ -r /dev/kvm ]; then
-              echo "KVM device found - QEMU will try hardware acceleration"
+              echo "KVM device found - QEMU will use hardware acceleration"
+              CPU_MODEL="host"
             else
               echo "KVM not available - QEMU will use software emulation (TCG)"
+              ${if haConfig.isAarch64
+                then ''CPU_MODEL="cortex-a72"  # Raspberry Pi 4 CPU''
+                else ''CPU_MODEL="qemu64"''
+              }
             fi
 
             # Common QEMU args
@@ -283,7 +285,8 @@ in {
               echo "Waiting for $IFACE to get IP address..."
               for i in $(seq 1 60); do
                 if ${pkgs.iproute2}/bin/ip -4 addr show "$IFACE" | ${pkgs.gnugrep}/bin/grep -q 'inet '; then
-                  echo "$IFACE has IP address"
+                  CURRENT_IP=$(${pkgs.iproute2}/bin/ip -4 addr show "$IFACE" | ${pkgs.gnugrep}/bin/grep -oP 'inet \K[0-9.]+')
+                  echo "$IFACE has IP address: $CURRENT_IP"
                   break
                 fi
                 if [ $i -eq 60 ]; then
@@ -293,6 +296,7 @@ in {
               done
 
               # Setup bridge and get tap device name
+              echo "Setting up network bridge..."
               TAP_DEV=$(${networking.setupBridge} "$IFACE")
               echo "Using tap device: $TAP_DEV"
 
@@ -300,7 +304,6 @@ in {
               echo "bridge" > /var/lib/havm/network_mode
 
               echo "Starting QEMU with bridge networking"
-
               exec ${pkgs.qemu}/bin/${haConfig.qemuBinary} "''${QEMU_ARGS[@]}" \
                 -netdev tap,id=net0,ifname=$TAP_DEV,script=no,downscript=no \
                 -device virtio-net-pci,netdev=net0,mac=$HAVM_MAC,bus=pcie.0,addr=0x4
@@ -319,6 +322,8 @@ in {
         then "hostfwd=tcp::22222-:22222"
         else "hostfwd=tcp::22222-:22"
       }"
+
+              echo "Starting QEMU with user-mode networking"
               exec ${pkgs.qemu}/bin/${haConfig.qemuBinary} "''${QEMU_ARGS[@]}" \
                 -netdev user,id=net0,hostfwd=tcp::8123-:8123,hostfwd=tcp::8443-:8443,$SSH_FWD \
                 -device virtio-net-pci,netdev=net0,mac=$HAVM_MAC,bus=pcie.0,addr=0x4

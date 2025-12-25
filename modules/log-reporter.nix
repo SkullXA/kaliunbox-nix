@@ -30,6 +30,7 @@
     # Services to collect logs from
     SERVICES=(
       "homeassistant-vm.service"
+      "havm-ensure-image.service"
       "homeassistant-info-fetcher.service"
       "homeassistant-proxy-setup.service"
       "homeassistant-health-check.service"
@@ -37,8 +38,9 @@
       "container@newt-agent.service"
       "kaliun-health-reporter.service"
       "kaliun-auto-update.service"
-      "kaliun-management-screen.service"
-      "kaliun-boot-health-check.service"
+      "management-console.service"
+      "kaliunbox-boot-health.service"
+      "kaliunbox-first-boot.service"
     )
 
     # Get cursor from last run (to only send new logs)
@@ -171,8 +173,8 @@ in {
   systemd.timers.kaliun-log-reporter = {
     wantedBy = ["timers.target"];
     timerConfig = {
-      OnBootSec = "3min";
-      OnUnitActiveSec = "15min";  # Send logs every 15 minutes
+      OnBootSec = "1min";
+      OnUnitActiveSec = "2min";  # Send logs every 2 minutes for better visibility
       Unit = "kaliun-log-reporter.service";
       Persistent = true;
     };
