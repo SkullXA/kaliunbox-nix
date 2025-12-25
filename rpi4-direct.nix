@@ -131,6 +131,27 @@
       export CONFIG_FILE="/var/lib/kaliun/config.json"
       export INSTALL_ID_FILE="/var/lib/kaliun/install_id"
       
+      # Show boot screen
+      ${pkgs.ncurses}/bin/tput clear > /dev/tty1
+      {
+        echo ""
+        echo ""
+        echo "  ========================================"
+        echo "  KaliunBox - Raspberry Pi"
+        echo "  ========================================"
+        echo ""
+        echo "  Waiting for network connection..."
+        echo ""
+      } > /dev/tty1
+      
+      # Wait for API to be reachable (network-online.target doesn't guarantee internet)
+      until ${pkgs.curl}/bin/curl -s -m 5 "$CONNECT_API_URL/health" >/dev/null 2>&1; do
+        sleep 2
+      done
+      
+      echo "  Network connected!" > /dev/tty1
+      sleep 1
+      
       # Use the standard claiming script
       ${builtins.readFile ./installer/claiming/claim-script.sh}
       
