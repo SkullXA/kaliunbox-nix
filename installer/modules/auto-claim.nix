@@ -218,6 +218,10 @@
       FLAKE_CONFIG="kaliunbox"
     fi
     echo "Detected architecture: $ARCH, using config: $FLAKE_CONFIG"
+    
+    # Store the flake target for auto-updates
+    echo "$FLAKE_CONFIG" > /mnt/var/lib/kaliun/flake_target
+    
     ${pkgs.nixos-install-tools}/bin/nixos-install --flake /mnt/etc/nixos/kaliunbox-flake#$FLAKE_CONFIG --no-root-passwd
 
     echo ""

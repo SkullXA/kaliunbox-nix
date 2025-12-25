@@ -170,14 +170,22 @@
         # Build new configuration (will activate on next boot)
         echo "Building new system configuration..."
 
-        # Detect architecture and select appropriate flake target
-        ARCH=$(${pkgs.coreutils}/bin/uname -m)
-        if [ "$ARCH" = "aarch64" ]; then
-          FLAKE_TARGET="kaliunbox-aarch64"
+        # Determine flake target:
+        # 1. Use stored target if available (set during installation/first-boot)
+        # 2. Fall back to architecture detection
+        if [ -f "$STATE_DIR/flake_target" ]; then
+          FLAKE_TARGET=$(cat "$STATE_DIR/flake_target")
+          echo "Using stored flake target: $FLAKE_TARGET"
         else
-          FLAKE_TARGET="kaliunbox"
+          # Fallback: detect architecture
+          ARCH=$(${pkgs.coreutils}/bin/uname -m)
+          if [ "$ARCH" = "aarch64" ]; then
+            FLAKE_TARGET="kaliunbox-aarch64"
+          else
+            FLAKE_TARGET="kaliunbox"
+          fi
+          echo "Detected architecture: $ARCH -> using flake target: $FLAKE_TARGET"
         fi
-        echo "Detected architecture: $ARCH -> using flake target: $FLAKE_TARGET"
 
         if /run/current-system/sw/bin/nixos-rebuild switch --flake ".#$FLAKE_TARGET"; then
           AFTER_GEN=$(readlink /nix/var/nix/profiles/system | ${pkgs.gnused}/bin/sed 's/system-\([0-9]*\)-link/\1/')

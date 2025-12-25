@@ -59,8 +59,8 @@
   # Hardware support
   hardware = {
     enableRedistributableFirmware = true;
-    # Raspberry Pi specific
-    raspberry-pi."4".apply-overlays-dtmerge.enable = lib.mkDefault true;
+    # Raspberry Pi 4 needs device tree support
+    deviceTree.enable = true;
   };
 
   # Network - Ethernet with DHCP
@@ -119,7 +119,7 @@
       TTYPath = "/dev/tty1";
     };
     
-    path = with pkgs; [curl jq qrencode util-linux coreutils ncurses];
+    path = with pkgs; [curl jq qrencode util-linux coreutils ncurses git];
     
     script = ''
       export CONNECT_API_URL="https://connect.kaliun.com"
@@ -129,6 +129,23 @@
       
       # Use the standard claiming script
       ${builtins.readFile ./installer/claiming/claim-script.sh}
+      
+      # After claiming succeeds, clone the flake repo for auto-updates
+      echo ""
+      echo "Setting up auto-update repository..."
+      
+      FLAKE_DIR="/etc/nixos/kaliunbox-flake"
+      if [ ! -d "$FLAKE_DIR" ]; then
+        ${pkgs.git}/bin/git clone https://github.com/SkullXA/kaliunbox-nix.git "$FLAKE_DIR"
+        echo "Repository cloned successfully"
+      fi
+      
+      # Store the flake target for this device (Pi uses kaliunbox-rpi4)
+      echo "kaliunbox-rpi4" > "$STATE_DIR/flake_target"
+      echo "Flake target set to: kaliunbox-rpi4"
+      
+      echo ""
+      echo "First boot setup complete!"
     '';
   };
 
