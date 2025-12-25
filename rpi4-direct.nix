@@ -138,11 +138,11 @@
     wants = ["network-online.target"];
     # Prevent management-console from fighting for tty1 during claiming
     conflicts = ["management-console.service"];
-    before = ["management-console.service"];
+    before = ["management-console.service" "kaliunbox-boot-health.service"];
     
     serviceConfig = {
       Type = "oneshot";
-      RemainAfterExit = true;
+      RemainAfterExit = false;
       StandardOutput = "tty";
       StandardError = "tty";
       TTYPath = "/dev/tty1";
@@ -184,32 +184,36 @@
       out "  Network connected!"
       sleep 1
       
-      # Override show_success to NOT say "Proceeding to installation" (Pi is already installed)
+      # Source the claiming script to get all functions
+      # Temporarily disable strict mode to allow function redefinition
+      set +euo
+      ${builtins.readFile ./installer/claiming/claim-script.sh}
+      set -euo pipefail
+      
+      # Override show_success for Pi (don't say "Proceeding to installation")
       show_success() {
           local config="$1"
           local customer_name=$(echo "$config" | ${pkgs.jq}/bin/jq -r '.customer.name // "Unknown"')
           local customer_contact=$(echo "$config" | ${pkgs.jq}/bin/jq -r '.customer.email // "Unknown"')
           
           ${pkgs.ncurses}/bin/tput clear > /dev/tty1
-          {
-              echo ""
-              echo ""
-              echo "  ========================================"
-              echo "  Device Claimed Successfully!"
-              echo "  ========================================"
-              echo ""
-              echo "  Customer: $customer_name"
-              echo "  Contact:  $customer_contact"
-              echo ""
-              echo ""
-              echo "  Finalizing setup..."
-              echo ""
-          } > /dev/tty1
+          out ""
+          out ""
+          out "  ========================================"
+          out "  Device Claimed Successfully!"
+          out "  ========================================"
+          out ""
+          out "  Customer: $customer_name"
+          out "  Contact:  $customer_contact"
+          out ""
+          out ""
+          out "  Finalizing setup..."
+          out ""
           sleep 2
       }
       
-      # Use the standard claiming script (our show_success override takes precedence)
-      ${builtins.readFile ./installer/claiming/claim-script.sh}
+      # Run the claiming process
+      main
       
       # After claiming succeeds, clone the flake repo for auto-updates
       out ""
@@ -218,7 +222,8 @@
       FLAKE_DIR="/etc/nixos/kaliunbox-flake"
       if [ ! -d "$FLAKE_DIR" ]; then
         # Clone with timeout (60 seconds) to prevent hanging
-        if timeout 60 ${pkgs.git}/bin/git clone --depth 1 https://github.com/SkullXA/kaliunbox-nix.git "$FLAKE_DIR" 2>/dev/null; then
+        # Use coreutils timeout command with full path
+        if ${pkgs.coreutils}/bin/timeout 60 ${pkgs.git}/bin/git clone --depth 1 https://github.com/SkullXA/kaliunbox-nix.git "$FLAKE_DIR" 2>/dev/null; then
           out "  Repository cloned successfully"
         else
           out "  Warning: Could not clone repository (will retry on next update)"
@@ -236,10 +241,9 @@
       out "  First Boot Setup Complete!"
       out "  ========================================"
       out ""
-      out "  System will now start Home Assistant..."
-      out "  This may take a few minutes on first boot."
+      out "  Starting management console..."
       out ""
-      sleep 3
+      sleep 2
     '';
   };
 
