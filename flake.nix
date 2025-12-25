@@ -69,13 +69,13 @@
         ];
       };
 
-    # Helper to create Raspberry Pi 4 SD card image
+    # Helper to create Raspberry Pi 4 SD card image (direct boot, plug-and-play)
     mkRpi4System =
       nixpkgs.lib.nixosSystem {
         system = "aarch64-linux";
         specialArgs = {inherit inputs;};
         modules = [
-          ./installer/rpi4-image.nix
+          ./rpi4-direct.nix
           # Apply custom package overlay
           {nixpkgs.overlays = [self.overlays.default];}
         ];
@@ -97,7 +97,7 @@
       kaliunbox-aarch64 = mkKaliunboxSystem "aarch64-linux";
       kaliunbox-installer-aarch64 = mkInstallerSystem "aarch64-linux";
 
-      # Raspberry Pi 4 SD card image
+      # Raspberry Pi 4 SD card image (direct boot, plug-and-play)
       kaliunbox-rpi4 = mkRpi4System;
     };
 
@@ -128,7 +128,8 @@
         # Add Raspberry Pi 4 SD image only for aarch64-linux
         if system == "aarch64-linux"
         then {
-          rpi4-image = self.nixosConfigurations.kaliunbox-rpi4.config.system.build.sdImage;
+          # Direct boot version (plug-and-play - just flash and boot!)
+          rpi4-direct = self.nixosConfigurations.kaliunbox-rpi4.config.system.build.sdImage;
         }
         else {}
       )

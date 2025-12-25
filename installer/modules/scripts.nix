@@ -56,77 +56,6 @@
       exit 1
     fi
 
-    # Thorough disk cleanup
-    echo "Unmounting existing partitions..."
-    for part in $(lsblk -ln -o NAME "$DISK_PATH" 2>/dev/null | tail -n +2); do
-      echo "  Unmounting /dev/$part..."
-      umount -l "/dev/$part" 2>/dev/null || true
-      umount -f "/dev/$part" 2>/dev/null || true
-    done
-    umount -l "$DISK_PATH"?* 2>/dev/null || true
-    umount -l "$DISK_PATH"p* 2>/dev/null || true
-    
-    # Deactivate swap
-    for part in $(lsblk -ln -o NAME "$DISK_PATH" 2>/dev/null | tail -n +2); do
-      swapoff "/dev/$part" 2>/dev/null || true
-    done
-
-    # Stop udev from interfering
-    echo "Stopping udev..."
-    udevadm control --stop-exec-queue 2>/dev/null || true
-    
-    # Close device-mapper devices
-    for dm in $(lsblk -ln -o NAME "$DISK_PATH" 2>/dev/null | grep "^dm-" || true); do
-      dmsetup remove -f "/dev/$dm" 2>/dev/null || true
-    done
-    
-    # Stop RAID arrays
-    mdadm --stop --scan 2>/dev/null || true
-    
-    # Flush and sync
-    echo "Flushing buffers..."
-    sync
-    sleep 1
-    blockdev --flushbufs "$DISK_PATH" 2>/dev/null || true
-    
-    # Explicitly delete all partitions using sfdisk
-    echo "Deleting existing partitions..."
-    sfdisk --delete "$DISK_PATH" 2>/dev/null || true
-    sync
-    sleep 1
-    
-    # Use sgdisk to completely zap the disk
-    echo "Zapping disk with sgdisk..."
-    sgdisk --zap-all "$DISK_PATH" 2>/dev/null || true
-    sync
-    sleep 1
-
-    # Zero partition table areas (10MB at start and end)
-    echo "Zeroing partition table areas..."
-    dd if=/dev/zero of="$DISK_PATH" bs=1M count=10 conv=notrunc status=none 2>/dev/null || true
-    DISK_SIZE_SECTORS=$(blockdev --getsz "$DISK_PATH" 2>/dev/null || echo "0")
-    if [ "$DISK_SIZE_SECTORS" -gt 20480 ]; then
-      dd if=/dev/zero of="$DISK_PATH" bs=512 count=20480 seek=$((DISK_SIZE_SECTORS - 20480)) conv=notrunc status=none 2>/dev/null || true
-    fi
-    sync
-
-    # Wipe signatures
-    echo "Wiping disk signatures..."
-    wipefs -af "$DISK_PATH" 2>/dev/null || true
-    sync
-    sleep 2
-
-    # Re-enable udev
-    udevadm control --start-exec-queue 2>/dev/null || true
-    udevadm settle --timeout=10 2>/dev/null || true
-    udevadm trigger --subsystem-match=block --action=change 2>/dev/null || true
-    sleep 2
-
-    # Final partition table re-read
-    blockdev --rereadpt "$DISK_PATH" 2>/dev/null || true
-    partprobe "$DISK_PATH" 2>/dev/null || true
-    sleep 3
-
     # Partition the disk
     echo "Partitioning $DISK_PATH..."
     parted -s "$DISK_PATH" -- mklabel gpt
@@ -135,9 +64,8 @@
     parted -s "$DISK_PATH" -- mkpart primary 512MiB 100%
 
     # Determine partition names
-    # NVMe and MMC devices use 'p' prefix for partitions (nvme0n1p1, mmcblk1p1)
-    # SATA/USB/VirtIO devices don't (sda1, vda1)
-    if [[ "$DISK" =~ nvme|mmcblk|loop ]]; then
+    # NVMe and MMC devices use 'p' prefix for partitions
+    if [[ "$DISK" =~ nvme|mmcblk ]]; then
       BOOT_PART="''${DISK_PATH}p1"
       ROOT_PART="''${DISK_PATH}p2"
     else
@@ -200,10 +128,6 @@ in {
     parted
     gptfdisk
     rsync
-    
-    # Disk management (for partition cleanup)
-    lvm2
-    mdadm
 
     # Terminal utilities (for claiming script)
     ncurses

@@ -155,7 +155,7 @@ jobs:
 
       - name: Build Raspberry Pi 4 SD Image
         run: |
-          nix build .#packages.aarch64-linux.rpi4-image --print-build-logs
+          nix build .#packages.aarch64-linux.rpi4-direct --print-build-logs
           mkdir -p dist
           # SD image is compressed with zstd
           cp -L result/sd-image/*.img.zst dist/kaliunbox-rpi4.img.zst

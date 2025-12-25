@@ -12,7 +12,7 @@
   connectApiUrl =
     if devMode
     then builtins.getEnv "KALIUNBOX_API_URL"
-    else "https://kaliun-connect-api-production.up.railway.app";
+    else "https://connect.kaliun.com";
 
   # Script to wait for network and show connection status
   waitForNetwork =
@@ -72,7 +72,7 @@
       fi
     ''
     else ''
-      # Production mode - wait for network with helpful status
+      # Production mode - wait for network with clean screen
       ${pkgs.ncurses}/bin/tput clear > /dev/tty1
       {
         echo ""
@@ -81,67 +81,12 @@
         echo "  KaliunBox Installer"
         echo "  ========================================"
         echo ""
-        echo "  Waiting for network connection..."
+        echo "  Initializing network connection..."
         echo ""
       } > /dev/tty1
 
-      # Check network interfaces
-      ETH_IFACE=$(${pkgs.iproute2}/bin/ip -o link show | ${pkgs.gnugrep}/bin/grep -E 'link/ether' | ${pkgs.gnugrep}/bin/grep -vE '(wl|br|docker|veth|tap)' | ${pkgs.gawk}/bin/awk -F': ' '{print $2}' | head -1)
-      
-      if [ -n "$ETH_IFACE" ]; then
-        echo "  Ethernet interface: $ETH_IFACE" > /dev/tty1
-        
-        # Check if cable is connected
-        CARRIER=$(cat /sys/class/net/$ETH_IFACE/carrier 2>/dev/null || echo "0")
-        if [ "$CARRIER" = "1" ]; then
-          echo "  Cable status: Connected ✓" > /dev/tty1
-        else
-          echo "  Cable status: Not connected ✗" > /dev/tty1
-          echo "" > /dev/tty1
-          echo "  ⚠ Please connect an Ethernet cable" > /dev/tty1
-        fi
-      else
-        echo "  ⚠ No Ethernet interface found" > /dev/tty1
-      fi
-      
-      echo "" > /dev/tty1
-      echo "  Connecting to KaliunBox servers..." > /dev/tty1
-      echo "" > /dev/tty1
-
-      # Retry loop with status
-      ATTEMPT=1
-      while true; do
-        printf "\r  Attempt %d - " "$ATTEMPT" > /dev/tty1
-        
-        if ${pkgs.curl}/bin/curl -s -m 5 ${connectApiUrl}/health >/dev/null 2>&1; then
-          printf "Connected! ✓                    \n" > /dev/tty1
-          sleep 1
-          break
-        else
-          printf "Waiting...                      " > /dev/tty1
-        fi
-        
-        # Every 10 attempts, show helpful message
-        if [ $((ATTEMPT % 10)) -eq 0 ]; then
-          {
-            echo ""
-            echo ""
-            echo "  ────────────────────────────────────"
-            echo "  Still waiting for connection..."
-            echo ""
-            echo "  Troubleshooting:"
-            echo "    • Check Ethernet cable is plugged in"
-            echo "    • Check router/switch is powered on"
-            echo "    • Try a different Ethernet port"
-            echo ""
-            echo "  For manual setup: Press Alt+F2"
-            echo "  ────────────────────────────────────"
-            echo ""
-          } > /dev/tty1
-        fi
-        
-        ATTEMPT=$((ATTEMPT + 1))
-        sleep 3
+      until ${pkgs.curl}/bin/curl -s -m 5 ${connectApiUrl}/health >/dev/null 2>&1; do
+        sleep 2
       done
     '';
 
@@ -194,85 +139,17 @@
     echo "Installing to: $DISK_PATH ($DISK_SIZE)"
     echo ""
 
-    # Unmount any existing partitions on the disk (more thorough approach)
+    # Unmount any existing partitions on the disk
     echo "Unmounting existing partitions..."
-    # First, find and unmount all partitions on this disk
-    for part in $(${pkgs.util-linux}/bin/lsblk -ln -o NAME "$DISK_PATH" 2>/dev/null | tail -n +2); do
-      echo "  Unmounting /dev/$part..."
-      ${pkgs.util-linux}/bin/umount -l "/dev/$part" 2>/dev/null || true  # lazy unmount
-      ${pkgs.util-linux}/bin/umount -f "/dev/$part" 2>/dev/null || true  # force unmount
-    done
-    # Also try direct unmount patterns for mmcblk devices
-    ${pkgs.util-linux}/bin/umount -l "$DISK_PATH"?* 2>/dev/null || true
-    ${pkgs.util-linux}/bin/umount -l "$DISK_PATH"p* 2>/dev/null || true
-    
-    # Deactivate any swap on the disk
-    for part in $(${pkgs.util-linux}/bin/lsblk -ln -o NAME "$DISK_PATH" 2>/dev/null | tail -n +2); do
-      ${pkgs.util-linux}/bin/swapoff "/dev/$part" 2>/dev/null || true
-    done
+    ${pkgs.util-linux}/bin/umount "$DISK_PATH"* 2>/dev/null || true
 
-    # Stop udev from interfering
-    echo "Stopping udev..."
-    ${pkgs.systemd}/bin/udevadm control --stop-exec-queue 2>/dev/null || true
-    
-    # Close any device-mapper devices on this disk
-    echo "Closing device-mapper..."
-    for dm in $(${pkgs.util-linux}/bin/lsblk -ln -o NAME "$DISK_PATH" 2>/dev/null | ${pkgs.gnugrep}/bin/grep "^dm-" || true); do
-      ${pkgs.lvm2}/bin/dmsetup remove -f "/dev/$dm" 2>/dev/null || true
-    done
-    
-    # Stop any RAID arrays that might use this disk
-    ${pkgs.mdadm}/bin/mdadm --stop --scan 2>/dev/null || true
-    
-    # Flush filesystem buffers
-    echo "Flushing buffers..."
-    sync
-    sleep 1
-
-    # Force kernel to drop cached partition info
-    echo "Releasing disk..."
-    ${pkgs.util-linux}/bin/blockdev --flushbufs "$DISK_PATH" 2>/dev/null || true
-    
-    # Explicitly delete all partitions using sfdisk (more reliable than just zeroing)
-    echo "Deleting existing partitions..."
-    ${pkgs.util-linux}/bin/sfdisk --delete "$DISK_PATH" 2>/dev/null || true
-    sync
-    sleep 1
-    
-    # Use sgdisk to completely zap the disk (handles both GPT and MBR)
-    echo "Zapping disk with sgdisk..."
-    ${pkgs.gptfdisk}/bin/sgdisk --zap-all "$DISK_PATH" 2>/dev/null || true
-    sync
-    sleep 1
-    
-    # Zero out first 10MB and last 10MB (more thorough than 1MB)
-    echo "Zeroing partition table areas..."
-    ${pkgs.coreutils}/bin/dd if=/dev/zero of="$DISK_PATH" bs=1M count=10 conv=notrunc status=none 2>/dev/null || true
-    DISK_SIZE_SECTORS=$(${pkgs.util-linux}/bin/blockdev --getsz "$DISK_PATH" 2>/dev/null || echo "0")
-    if [ "$DISK_SIZE_SECTORS" -gt 20480 ]; then
-      # Zero last 10MB (20480 sectors of 512 bytes)
-      ${pkgs.coreutils}/bin/dd if=/dev/zero of="$DISK_PATH" bs=512 count=20480 seek=$((DISK_SIZE_SECTORS - 20480)) conv=notrunc status=none 2>/dev/null || true
-    fi
-    sync
-
-    # Wipe any remaining signatures
+    # Wipe disk signatures
     echo "Wiping disk signatures..."
-    ${pkgs.util-linux}/bin/wipefs -af "$DISK_PATH" 2>/dev/null || true
-    sync
-    sleep 2
+    ${pkgs.util-linux}/bin/wipefs -af "$DISK_PATH"
 
-    # Re-enable udev
-    ${pkgs.systemd}/bin/udevadm control --start-exec-queue 2>/dev/null || true
-    
-    # Wait for udev to settle and re-scan device
-    ${pkgs.systemd}/bin/udevadm settle --timeout=10 2>/dev/null || true
-    ${pkgs.systemd}/bin/udevadm trigger --subsystem-match=block --action=change 2>/dev/null || true
+    # Inform kernel of partition changes
+    ${pkgs.parted}/bin/partprobe "$DISK_PATH" || true
     sleep 2
-
-    # Force kernel to re-read partition table (should succeed now)
-    ${pkgs.util-linux}/bin/blockdev --rereadpt "$DISK_PATH" 2>/dev/null || true
-    ${pkgs.parted}/bin/partprobe "$DISK_PATH" 2>/dev/null || true
-    sleep 3
 
     # Partition the disk
     echo "Partitioning $DISK_PATH..."
@@ -286,9 +163,8 @@
     sleep 2
 
     # Determine partition names
-    # NVMe and MMC devices use 'p' prefix for partitions (nvme0n1p1, mmcblk1p1)
-    # SATA/USB/VirtIO devices don't (sda1, vda1)
-    if [[ "$DISK" =~ nvme|mmcblk|loop ]]; then
+    # NVMe and MMC devices use 'p' prefix for partitions (nvme0n1p1, mmcblk0p1)
+    if [[ "$DISK" =~ nvme|mmcblk ]]; then
       BOOT_PART="''${DISK_PATH}p1"
       ROOT_PART="''${DISK_PATH}p2"
     else
@@ -320,7 +196,7 @@
     ${pkgs.coreutils}/bin/mkdir -p /mnt/etc/nixos
     ${pkgs.nixos-install-tools}/bin/nixos-generate-config --root /mnt
 
-    # Copy KaliunBox flake (in dev mode) or clone from GitLab (in production)
+    # Copy KaliunBox flake (in dev mode) or clone from GitHub (in production)
     ${
       if devMode
       then ''
@@ -347,11 +223,11 @@
     echo ""
     echo "=== Installation Complete ==="
     echo ""
-    echo "Please remove the installation media (USB key)"
-    echo "and press Enter to reboot..."
+    echo "Rebooting in 3 seconds..."
+    echo "Remove installation media now."
     echo ""
 
-    read -r
+    sleep 3
     ${pkgs.systemd}/bin/reboot
   '';
 
@@ -392,7 +268,6 @@ in {
         coreutils
         gawk
         gnugrep
-        iproute2
       ];
       script = ''
         # Set Connect API URL
