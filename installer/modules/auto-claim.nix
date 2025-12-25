@@ -199,27 +199,77 @@
     # First, find and unmount all partitions on this disk
     for part in $(${pkgs.util-linux}/bin/lsblk -ln -o NAME "$DISK_PATH" 2>/dev/null | tail -n +2); do
       echo "  Unmounting /dev/$part..."
-      ${pkgs.util-linux}/bin/umount -f "/dev/$part" 2>/dev/null || true
+      ${pkgs.util-linux}/bin/umount -l "/dev/$part" 2>/dev/null || true  # lazy unmount
+      ${pkgs.util-linux}/bin/umount -f "/dev/$part" 2>/dev/null || true  # force unmount
     done
-    # Also try direct unmount patterns
-    ${pkgs.util-linux}/bin/umount -f "$DISK_PATH"?* 2>/dev/null || true
-    ${pkgs.util-linux}/bin/umount -f "$DISK_PATH"p* 2>/dev/null || true
+    # Also try direct unmount patterns for mmcblk devices
+    ${pkgs.util-linux}/bin/umount -l "$DISK_PATH"?* 2>/dev/null || true
+    ${pkgs.util-linux}/bin/umount -l "$DISK_PATH"p* 2>/dev/null || true
     
     # Deactivate any swap on the disk
     for part in $(${pkgs.util-linux}/bin/lsblk -ln -o NAME "$DISK_PATH" 2>/dev/null | tail -n +2); do
       ${pkgs.util-linux}/bin/swapoff "/dev/$part" 2>/dev/null || true
     done
 
-    # Force kernel to re-read partition table
+    # Stop udev from interfering
+    echo "Stopping udev..."
+    ${pkgs.systemd}/bin/udevadm control --stop-exec-queue 2>/dev/null || true
+    
+    # Close any device-mapper devices on this disk
+    echo "Closing device-mapper..."
+    for dm in $(${pkgs.util-linux}/bin/lsblk -ln -o NAME "$DISK_PATH" 2>/dev/null | ${pkgs.gnugrep}/bin/grep "^dm-" || true); do
+      ${pkgs.lvm2}/bin/dmsetup remove -f "/dev/$dm" 2>/dev/null || true
+    done
+    
+    # Stop any RAID arrays that might use this disk
+    ${pkgs.mdadm}/bin/mdadm --stop --scan 2>/dev/null || true
+    
+    # Flush filesystem buffers
+    echo "Flushing buffers..."
+    sync
+    sleep 1
+
+    # Force kernel to drop cached partition info
     echo "Releasing disk..."
-    ${pkgs.util-linux}/bin/blockdev --rereadpt "$DISK_PATH" 2>/dev/null || true
+    ${pkgs.util-linux}/bin/blockdev --flushbufs "$DISK_PATH" 2>/dev/null || true
+    
+    # Explicitly delete all partitions using sfdisk (more reliable than just zeroing)
+    echo "Deleting existing partitions..."
+    ${pkgs.util-linux}/bin/sfdisk --delete "$DISK_PATH" 2>/dev/null || true
+    sync
+    sleep 1
+    
+    # Use sgdisk to completely zap the disk (handles both GPT and MBR)
+    echo "Zapping disk with sgdisk..."
+    ${pkgs.gptfdisk}/bin/sgdisk --zap-all "$DISK_PATH" 2>/dev/null || true
+    sync
+    sleep 1
+    
+    # Zero out first 10MB and last 10MB (more thorough than 1MB)
+    echo "Zeroing partition table areas..."
+    ${pkgs.coreutils}/bin/dd if=/dev/zero of="$DISK_PATH" bs=1M count=10 conv=notrunc status=none 2>/dev/null || true
+    DISK_SIZE_SECTORS=$(${pkgs.util-linux}/bin/blockdev --getsz "$DISK_PATH" 2>/dev/null || echo "0")
+    if [ "$DISK_SIZE_SECTORS" -gt 20480 ]; then
+      # Zero last 10MB (20480 sectors of 512 bytes)
+      ${pkgs.coreutils}/bin/dd if=/dev/zero of="$DISK_PATH" bs=512 count=20480 seek=$((DISK_SIZE_SECTORS - 20480)) conv=notrunc status=none 2>/dev/null || true
+    fi
+    sync
+
+    # Wipe any remaining signatures
+    echo "Wiping disk signatures..."
+    ${pkgs.util-linux}/bin/wipefs -af "$DISK_PATH" 2>/dev/null || true
+    sync
     sleep 2
 
-    # Wipe disk signatures
-    echo "Wiping disk signatures..."
-    ${pkgs.util-linux}/bin/wipefs -af "$DISK_PATH"
+    # Re-enable udev
+    ${pkgs.systemd}/bin/udevadm control --start-exec-queue 2>/dev/null || true
+    
+    # Wait for udev to settle and re-scan device
+    ${pkgs.systemd}/bin/udevadm settle --timeout=10 2>/dev/null || true
+    ${pkgs.systemd}/bin/udevadm trigger --subsystem-match=block --action=change 2>/dev/null || true
+    sleep 2
 
-    # Inform kernel of partition changes again
+    # Force kernel to re-read partition table (should succeed now)
     ${pkgs.util-linux}/bin/blockdev --rereadpt "$DISK_PATH" 2>/dev/null || true
     ${pkgs.parted}/bin/partprobe "$DISK_PATH" 2>/dev/null || true
     sleep 3

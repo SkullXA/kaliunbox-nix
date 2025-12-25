@@ -83,10 +83,13 @@ in {
     curl
     wget
     parted
+    gptfdisk    # for sgdisk
     dosfstools
     e2fsprogs
     util-linux
     usbutils
+    lvm2
+    mdadm
   ];
 
   # SSH for headless setup
