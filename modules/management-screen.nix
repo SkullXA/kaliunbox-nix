@@ -252,9 +252,11 @@ in {
       # Management console service - runs directly on tty1, no shell involved
       management-console = {
         description = "KaliunBox Management Console";
-        after = ["systemd-user-sessions.service" "plymouth-quit-wait.service" "getty-pre.target"];
+        # CRITICAL: Start AFTER multi-user.target completes to avoid blocking boot
+        # If this starts too early and hangs on tty1, it blocks systemd startup
+        after = ["multi-user.target" "systemd-user-sessions.service"];
         conflicts = ["getty@tty1.service"];
-        wantedBy = ["multi-user.target"];
+        # Don't use wantedBy - we'll start it via timer to avoid blocking boot
 
         serviceConfig = {
           Type = "simple";
@@ -277,6 +279,17 @@ in {
         unitConfig = {
           ConditionPathExists = "/dev/tty1";
         };
+      };
+    };
+
+    # Timer to start management console after boot completes
+    # This prevents it from blocking systemd startup if tty1 isn't ready
+    systemd.timers.management-console-start = {
+      description = "Start management console after boot";
+      wantedBy = ["timers.target"];
+      timerConfig = {
+        OnBootSec = "5s";  # Start 5 seconds after boot
+        Unit = "management-console.service";
       };
     };
 
