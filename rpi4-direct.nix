@@ -143,9 +143,6 @@
     wantedBy = ["multi-user.target"];
     after = ["network-online.target"];
     wants = ["network-online.target"];
-    # Prevent management-console from fighting for tty1 during claiming
-    conflicts = ["management-console.service"];
-    before = ["management-console.service" "kaliunbox-boot-health.service"];
 
     # Only run if not yet claimed (! means "if NOT exists")
     # This must be in unitConfig, not serviceConfig
@@ -252,12 +249,9 @@
       out "  First Boot Setup Complete!"
       out "  ========================================"
       out ""
-      out "  Starting management console..."
+      out "  Management console will start automatically..."
       out ""
       sleep 2
-
-      # Explicitly start management console since 'conflicts' blocks it from auto-starting
-      ${pkgs.systemd}/bin/systemctl start management-console.service --no-block || true
     '';
   };
 
