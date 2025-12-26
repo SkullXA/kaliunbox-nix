@@ -12,7 +12,6 @@
 in {
   imports = [
     ./vm-service.nix
-    ./image-ensure.nix
     ./proxy-setup.nix
     ./info-fetcher.nix
     ./scripts.nix
@@ -31,13 +30,30 @@ in {
     groups.kvm = {};
   };
 
-  # NOTE: Home Assistant OS image download is handled by havm-ensure-image.service
-  # (see image-ensure.nix), which runs after network-online.target.
-  # We do NOT download during activation because:
-  # 1. Network may not be ready during activation (before systemd starts)
-  # 2. curl without timeout can hang indefinitely, blocking boot at "starting systemd..."
-  # 3. The image-ensure service has proper retries, progress logging, and validation
+  # Download Home Assistant OS image at activation
   system.activationScripts = {
+    downloadHomeAssistant = lib.stringAfter ["users"] ''
+      if [ ! -f "${haConfig.haosImagePath}" ] || [ ! -s "${haConfig.haosImagePath}" ]; then
+        echo "Downloading Home Assistant OS ${haConfig.haosVersion}..."
+        mkdir -p $(dirname "${haConfig.haosImagePath}")
+        rm -f "${haConfig.haosImagePath}" "${haConfig.haosImagePath}.tmp"
+
+        # Fresh image means HA needs to reinitialize - delete the initialization marker
+        rm -f /var/lib/havm/ha_initialized
+
+        # Download to temp file first, then decompress
+        # xz -d removes .xz extension automatically, producing ${haConfig.haosImagePath}
+        if ${pkgs.curl}/bin/curl --fail --cacert ${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt -L -o "${haConfig.haosImagePath}.xz" "${haConfig.haosUrl}"; then
+          ${pkgs.xz}/bin/xz -d "${haConfig.haosImagePath}.xz"
+        else
+          echo "ERROR: Failed to download Home Assistant OS image"
+          rm -f "${haConfig.haosImagePath}.xz"
+          exit 1
+        fi
+      fi
+      chown havm:kvm "${haConfig.haosImagePath}"
+      chmod 660 "${haConfig.haosImagePath}"
+    '';
 
     # Create directory for Home Assistant VM data
     havmDirectories = lib.stringAfter ["users"] ''
