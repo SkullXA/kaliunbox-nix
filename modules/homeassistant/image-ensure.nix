@@ -76,6 +76,32 @@
     echo "Download complete; decompressing..."
     ${pkgs.xz}/bin/xz -d "''${IMG}.xz"
 
+    # Auto-size the qcow2 based on available disk space
+    # Reserve 5GB for NixOS system, give the rest to HAOS (min 10GB, max 200GB)
+    DISK_DIR="$(dirname "$IMG")"
+    AVAILABLE_KB=$(df -k "$DISK_DIR" | tail -1 | awk '{print $4}')
+    AVAILABLE_GB=$((AVAILABLE_KB / 1024 / 1024))
+
+    # Current qcow2 virtual size
+    CURRENT_SIZE_BYTES=$(${pkgs.qemu}/bin/qemu-img info --output=json "$IMG" | ${pkgs.jq}/bin/jq -r '."virtual-size"')
+    CURRENT_SIZE_GB=$((CURRENT_SIZE_BYTES / 1024 / 1024 / 1024))
+
+    # Calculate target: available space minus 5GB buffer, clamped to 10-200GB range
+    RESERVE_GB=5
+    TARGET_GB=$((AVAILABLE_GB - RESERVE_GB + CURRENT_SIZE_GB))
+
+    # Clamp to reasonable range
+    if [ "$TARGET_GB" -lt 10 ]; then
+      TARGET_GB=10
+    elif [ "$TARGET_GB" -gt 200 ]; then
+      TARGET_GB=200
+    fi
+
+    echo "Disk space: ''${AVAILABLE_GB}GB available, current HAOS disk: ''${CURRENT_SIZE_GB}GB"
+    echo "Resizing HAOS virtual disk to ''${TARGET_GB}GB..."
+    ${pkgs.qemu}/bin/qemu-img resize "$IMG" "''${TARGET_GB}G"
+    echo "HAOS virtual disk resized to ''${TARGET_GB}GB (HAOS will auto-expand filesystem on boot)"
+
     chown havm:kvm "$IMG" || true
     chmod 660 "$IMG" || true
 
