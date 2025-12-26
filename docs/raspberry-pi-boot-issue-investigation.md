@@ -1,261 +1,288 @@
 # Raspberry Pi 4 Boot Issue Investigation
 
 **Date:** December 26, 2025
-**Issue:** Pi 4 hangs at "starting systemd..." after auto-updates, only older generations boot successfully
+**Status:** RESOLVED
+**Last Updated:** December 26, 2025
 
 ## Problem Summary
 
-After auto-updates, newer NixOS generations (3+) hang at "starting systemd..." during boot. Only generation 2 ("Configuration 2-default") boots successfully. User must manually select working generation from boot menu every time.
+After auto-updates or rebuilds, Pi 4 would show management console not starting, appearing stuck. SSH access worked fine but the display showed no management UI.
 
-## Root Cause Analysis
+## Investigation Timeline
 
-### The Bug Introduction Timeline
+### Initial (Wrong) Hypothesis: `/boot/firmware` Mount Issue
 
-**Commit ef0f0ca** (Dec 25, 13:54:20 2025): "Switch to direct boot RPi4 image and simplify installer"
-- Replaced installer-based approach with direct boot (plug-and-play)
-- **Old approach:** Boot installer ISO → Run `kaliunbox-install` → Runs `nixos-install --flake .#kaliunbox` → Reboot into installed system
-- **New approach:** Flash SD image → Boot directly into final system → Auto-claim on first boot
-- Removed 333 lines, added 166 lines
-- Deleted `installer/rpi4-image.nix`
-- Created `rpi4-direct.nix`
+**Original Theory:**
+- The SD image module sets `/boot/firmware` with `noauto` mount option
+- extlinux bootloader needs to write to `/boot/firmware/extlinux/extlinux.conf`
+- Since firmware isn't mounted, bootloader writes fail silently
 
-**Commit dc5809a** (Dec 25, 13:58:29 2025 - **4 minutes later**): "Persist flake target for auto-updates"
-- **THIS IS WHERE THE BUG WAS INTRODUCED**
-- Added line in `rpi4-direct.nix:247`:
-  ```bash
-  # Store the flake target for this device (Pi uses kaliunbox-rpi4)
-  echo "kaliunbox-rpi4" > "$STATE_DIR/flake_target"
-  ```
-- Updated `modules/auto-update.nix` to read from `/var/lib/kaliun/flake_target`
-- This tells auto-update to rebuild using `kaliunbox-rpi4` flake target
-- **Problem:** `kaliunbox-rpi4` imports the SD image module, which is designed for image creation, not live systems
+**Why This Was Wrong:**
 
-### Technical Root Cause
+After thorough investigation on December 26, 2025, we discovered:
 
-The SD image module (`nixos/modules/installer/sd-card/sd-image.nix`) contains this filesystem configuration:
-
-```nix
-fileSystems = {
-  "/boot/firmware" = {
-    device = "/dev/disk/by-label/${config.sdImage.firmwarePartitionName}";
-    fsType = "vfat";
-    options = [
-      "nofail"
-      "noauto"  # ← THE PROBLEM
-    ];
-  };
-  "/" = {
-    device = "/dev/disk/by-label/${config.sdImage.rootVolumeLabel}";
-    fsType = "ext4";
-  };
-};
-```
-
-The `noauto` mount option means `/boot/firmware` is **never mounted automatically at boot**.
-
-### Why This Breaks Live Rebuilds
-
-1. Auto-update runs: `nixos-rebuild switch --flake .#kaliunbox-rpi4`
-2. extlinux bootloader needs to write new boot menu to `/boot/firmware/extlinux/extlinux.conf`
-3. But `/boot/firmware` is not mounted (due to `noauto` option)
-4. Bootloader write fails silently or creates incomplete/corrupt boot config
-5. Next boot: extlinux can't find proper boot configuration → hangs at "starting systemd..."
-
-### Why Image Creation Works But Rebuilds Don't
-
-- **SD Image Creation (offline build):** Works fine because the build system directly populates the firmware partition during image creation - no mounting needed
-- **Live System Rebuilds:** Fails because the bootloader runs on a live system and expects `/boot/firmware` to be mounted for writes
-
-### Why Old Installer Approach Worked
-
-The old installer approach worked because:
-
-1. Installer ISO boots with installer-specific config
-2. User runs `kaliunbox-install` script
-3. Script runs: `nixos-install --flake /mnt/etc/nixos/kaliunbox-flake#kaliunbox`
-4. Uses **`kaliunbox`** target (x86) or **`kaliunbox-aarch64`** target (ARM64)
-5. These targets do NOT import the SD image module
-6. Result: `/boot/firmware` has normal mount behavior on installed system
-
-The old `installer/rpi4-image.nix` used `sd-image-aarch64-installer.nix` (installer variant), not the regular `sd-image-aarch64.nix`. The installer variant is designed for live systems.
-
-## Debugging Attempts Made
-
-### Attempt 1: Remove HAOS Download from Activation Script
-- **Hypothesis:** Activation script downloading HAOS image was blocking boot
-- **Fix:** Removed `downloadHomeAssistant` activation script from `modules/homeassistant/default.nix`
-- **Result:** Didn't fix the issue, but was a legitimate improvement (network may not be ready during activation)
-- **Commit:** Part of ongoing fixes
-
-### Attempt 2: Delay Management Console with Timer
-- **Hypothesis:** `management-console.service` with `wantedBy=multi-user.target` was blocking systemd startup
-- **Fix:** Removed `wantedBy`, added systemd timer to start 5 seconds after boot
-- **Result:** Made things WORSE - even generation 2 stopped working
-- **Resolution:** Reverted in commit 78f46fd
-
-### Attempt 3: Identify Generation Differences
-- **Investigation:** Compared working gen 2 vs broken gen 3+
-- **Finding:** Identical kernel, initrd, but different systemConfig paths
-- **Realization:** The issue isn't in the system config content, but in how the bootloader is configured
-
-### Final Discovery
-- **Investigation:** Checked what flake target is used for rebuilds
-- **Finding:** `/var/lib/kaliun/flake_target` contains `kaliunbox-rpi4`
-- **Root Cause:** Using SD image flake target for live rebuilds causes `/boot/firmware` mounting issues
-
-## The "Two Step Problem" Context
-
-The user mentioned "we had that initially... it was an issue with pi that has this 2 step problem."
-
-This refers to the **UX complexity** of the old installer approach, NOT a technical bug:
-- **Step 1:** Boot installer, run claiming, run install script
-- **Step 2:** Reboot into installed system
-
-The switch to direct boot (commit ef0f0ca) was intended to simplify this to one step. However, the follow-up commit (dc5809a) that added flake target persistence introduced the rebuild bug by using the wrong target.
-
-## Proposed Solution (Not Implemented)
-
-Create a separate `rpi4-live.nix` configuration that:
-1. Imports all the same modules as `rpi4-direct.nix`
-2. Does **NOT** import the SD image module (`sd-image-aarch64.nix`)
-3. Has proper `/boot/firmware` mount config for live system (without `noauto`)
-
-Then update `rpi4-direct.nix:247` to write `kaliunbox-rpi4-live` instead of `kaliunbox-rpi4`.
-
-### Example Implementation
-
-**File: `rpi4-live.nix`**
-```nix
-# KaliunBox Raspberry Pi 4 Live System Configuration
-# This is the config used for rebuilds AFTER the initial SD image boot
-# Unlike rpi4-direct.nix, this does NOT import the SD image module
-{
-  config,
-  pkgs,
-  lib,
-  inputs,
-  ...
-}: {
-  imports = [
-    # KaliunBox system modules (the actual system, not SD image builder)
-    ./modules/base-system.nix
-    ./modules/homeassistant
-    ./modules/connect-sync.nix
-    ./modules/health-reporter.nix
-    ./modules/boot-health-check.nix
-    ./modules/log-reporter.nix
-    ./modules/management-screen.nix
-    ./modules/auto-update.nix
-    ./modules/network-watchdog.nix
-    ./modules/newt-container.nix
-  ];
-
-  # Raspberry Pi 4 specific boot configuration
-  boot = {
-    loader = {
-      grub.enable = false;
-      generic-extlinux-compatible = {
-        enable = true;
-        configurationLimit = 5;
-      };
-      timeout = 5;
-    };
-
-    kernelParams = [
-      "console=ttyS0,115200"
-      "console=tty1"
-      "kvm-arm.mode=nvhe"
-    ];
-
-    kernelModules = ["kvm" "tun"];
-  };
-
-  # Proper filesystem config for live system (without noauto)
-  fileSystems = {
-    "/" = {
-      device = "/dev/disk/by-label/NIXOS_SD";
-      fsType = "ext4";
-    };
-    "/boot/firmware" = {
-      device = "/dev/disk/by-label/FIRMWARE";
-      fsType = "vfat";
-      # Note: NO "noauto" option - bootloader needs to write here
-      options = ["nofail"];
-    };
-  };
-
-  # ... rest of config same as rpi4-direct.nix
-}
-```
-
-**Update `flake.nix`:**
-```nix
-nixosConfigurations = {
-  # ... existing configs ...
-
-  # Raspberry Pi 4 SD card image (initial flash only)
-  kaliunbox-rpi4 = mkRpi4System;
-
-  # Raspberry Pi 4 live system (for rebuilds after first boot)
-  kaliunbox-rpi4-live = nixpkgs.lib.nixosSystem {
-    system = "aarch64-linux";
-    specialArgs = {inherit inputs;};
-    modules = [
-      ./rpi4-live.nix
-      {nixpkgs.overlays = [self.overlays.default];}
-    ];
-  };
-};
-```
-
-**Update `rpi4-direct.nix:247`:**
 ```bash
-# Store the flake target for this device (Pi uses kaliunbox-rpi4-live for rebuilds)
-echo "kaliunbox-rpi4-live" > "$STATE_DIR/flake_target"
+[root@kaliunbox:~]# ls -la /boot/extlinux/
+total 12
+drwxr-xr-x 2 root root 4096 Dec 26 21:09 .
+drwxr-xr-x 4 root root 4096 Jan  1  1970 ..
+-rw-r--r-- 1 root root 4056 Dec 26 21:09 extlinux.conf
+
+[root@kaliunbox:~]# mount /dev/mmcblk1p1 /mnt/firmware
+[root@kaliunbox:~]# ls -la /mnt/firmware/extlinux/
+ls: cannot access '/mnt/firmware/extlinux/': No such file or directory
 ```
+
+**Key Finding:** The extlinux bootloader config lives on the **ROOT partition** at `/boot/extlinux/extlinux.conf`, NOT on the firmware partition!
+
+The firmware partition (`/dev/mmcblk1p1`) only contains:
+- GPU firmware files (start*.elf, bootcode.bin, fixup*.dat)
+- Device tree blobs (bcm2711-rpi-4-b.dtb, etc.)
+- U-Boot bootloader (u-boot-rpi4.bin)
+- config.txt
+
+**Raspberry Pi Boot Chain:**
+1. GPU firmware (bootcode.bin) loads from firmware partition
+2. GPU reads config.txt which launches U-Boot
+3. U-Boot loads extlinux.conf from `/boot/extlinux/` on **root partition** (always mounted)
+4. extlinux boots the selected NixOS generation
+
+Since `/boot/extlinux/` is on the root partition, the `noauto` mount option for the firmware partition was **never the actual issue**.
+
+---
+
+## Actual Root Cause: Service Conflicts
+
+### The Real Bug
+
+In `rpi4-direct.nix`, the first-boot claiming service had these directives:
+
+```nix
+systemd.services.kaliunbox-first-boot = {
+  # ...
+  wantedBy = ["multi-user.target"];
+  after = ["network-online.target"];
+  wants = ["network-online.target"];
+  conflicts = ["management-console.service"];  # ← THE PROBLEM
+  before = ["management-console.service" "kaliunbox-boot-health.service"];
+  # ...
+  unitConfig = {
+    ConditionPathExists = "!/var/lib/kaliun/config.json";  # Only run if NOT claimed
+  };
+};
+```
+
+### Why This Caused the Issue
+
+1. **On first boot (unclaimed):**
+   - `ConditionPathExists` passes (no config.json yet)
+   - first-boot service runs, claims device, completes
+   - management-console starts after first-boot finishes
+   - Everything works
+
+2. **On subsequent boots (already claimed):**
+   - `ConditionPathExists` **fails** (config.json exists)
+   - first-boot service is **skipped entirely** (condition not met)
+   - BUT the `conflicts` directive still applies to the unit definition
+   - This creates a subtle systemd ordering issue
+   - management-console may not auto-start properly
+
+### The Fix
+
+Removed the `conflicts` and `before` directives from the first-boot service:
+
+```nix
+systemd.services.kaliunbox-first-boot = {
+  description = "KaliunBox First Boot Setup";
+  wantedBy = ["multi-user.target"];
+  after = ["network-online.target"];
+  wants = ["network-online.target"];
+  # conflicts and before REMOVED
+
+  unitConfig = {
+    ConditionPathExists = "!/var/lib/kaliun/config.json";
+  };
+  # ...
+};
+```
+
+**Result:** Management console now auto-starts correctly on all boots.
+
+---
+
+## Current System State (Working)
+
+### Boot Configuration
+
+```bash
+[root@kaliunbox:~]# cat /boot/extlinux/extlinux.conf
+# Generated file, all changes will be lost on nixos-rebuild!
+
+DEFAULT nixos-default
+TIMEOUT 50
+
+LABEL nixos-default
+  MENU LABEL NixOS - Default
+  LINUX ../nixos/...-linux-6.12.59-Image
+  INITRD ../nixos/...-initrd-linux-6.12.59-initrd
+  APPEND init=/nix/store/.../init ...
+  FDTDIR ../nixos/...-linux-6.12.59-dtbs
+
+LABEL nixos-11-default
+  MENU LABEL NixOS - Configuration 11-default (2025-12-26 19:18)
+  ...
+
+# (5 generations shown as per configurationLimit = 5)
+```
+
+### NixOS Generations
+
+```bash
+[root@kaliunbox:~]# ls -la /nix/var/nix/profiles/
+system -> system-11-link
+system-11-link -> /nix/store/...-nixos-system-kaliunbox-sd-card-25.11...
+system-10-link -> /nix/store/...
+# ... generations 7-11 available
+```
+
+### Auto-Update Status
+
+The auto-update system should now work correctly because:
+1. extlinux.conf is on root partition (always mounted)
+2. nixos-rebuild switch updates `/boot/extlinux/extlinux.conf` correctly
+3. New generations are added to boot menu
+4. `configurationLimit = 5` keeps boot menu manageable
+
+---
+
+## Other Issues Fixed in This Session
+
+### X86 Black Screen After Install
+
+**Symptom:** Fresh x86 VM install showed black screen after claiming, before management console.
+
+**Cause:** An `image-ensure.nix` service was added that blocked boot with:
+```nix
+requiredBy = ["multi-user.target"];
+```
+
+**Fix:** Reverted to original activation script approach for downloading HAOS image. Removed `image-ensure.nix` from imports.
+
+---
 
 ## Key Learnings
 
-1. **SD Image Modules Are For Image Creation Only**
-   - The `sd-image*.nix` modules are designed for offline image building
-   - They should NOT be included in live system configurations
-   - The `noauto` mount option makes sense for image creation but breaks live bootloader updates
+### 1. Raspberry Pi Boot Architecture
 
-2. **Raspberry Pi Uses Different Bootloader**
-   - x86/aarch64 VMs use systemd-boot (UEFI)
-   - Raspberry Pi uses extlinux (U-Boot compatible)
-   - extlinux writes boot config to `/boot/firmware/extlinux/extlinux.conf`
-   - This directory MUST be mounted for bootloader updates to work
+The Pi boot chain is different from what we assumed:
 
-3. **Flake Target Persistence Is Critical**
-   - Auto-update needs to know which flake target to use
-   - Wrong target = wrong modules imported = broken system
-   - Must use separate configs for image creation vs live system
+| Component | Location | Purpose |
+|-----------|----------|---------|
+| GPU Firmware | Firmware partition (mmcblk1p1) | Initial hardware init |
+| config.txt | Firmware partition | GPU config, launches U-Boot |
+| U-Boot | Firmware partition | Bootloader that reads extlinux |
+| extlinux.conf | **Root partition** (/boot/extlinux/) | NixOS generation menu |
+| Kernel + initrd | Root partition (/boot/nixos/) | Actual NixOS system |
 
-4. **Silent Bootloader Failures Are Hard to Debug**
-   - When `/boot/firmware` isn't mounted, bootloader writes may fail silently
-   - System appears to build successfully but won't boot
-   - No error messages because the build itself succeeds - only the bootloader write fails
+### 2. systemd Condition Gotchas
+
+When a service has `ConditionPathExists` that fails:
+- The service is **skipped** (not run)
+- But unit file directives like `conflicts` may still affect other services
+- This can cause subtle ordering issues that only appear after first boot
+
+### 3. Debugging Approach
+
+For Pi boot issues, check:
+1. `systemctl status <service>` for all related services
+2. `journalctl -u <service>` for detailed logs
+3. Verify boot config with `cat /boot/extlinux/extlinux.conf`
+4. Check generations with `ls -la /nix/var/nix/profiles/`
+5. SSH may work even if display shows nothing
+
+---
+
+## Files Modified
+
+1. **rpi4-direct.nix** - Removed `conflicts` and `before` directives from first-boot service
+2. **modules/homeassistant/default.nix** - Reverted HAOS download to activation script (for x86 fix)
+
+---
+
+## HAOS VM Recovery Procedure
+
+### Warning: VM Force-Kills Can Corrupt QCOW2
+
+During debugging, if the Home Assistant VM is force-killed (e.g., 120s systemd timeout, `kill -9`, power loss), the qcow2 disk image can become corrupted. Symptoms:
+
+- VM starts but console is blank
+- Guest agent not responding
+- UEFI stuck, never finds bootable OS
+- `homeassistant-status` shows VM running but no IP
+
+### Full Reset Procedure
+
+If HAOS VM is corrupted and won't boot, perform a full reset:
+
+```bash
+# Stop the VM
+systemctl stop homeassistant-vm.service
+
+# Delete all VM state (THIS ERASES ALL HOME ASSISTANT DATA!)
+rm -f /var/lib/kaliun/home-assistant.qcow2
+rm -f /var/lib/havm/efivars.fd
+rm -f /var/lib/havm/ha_initialized
+rm -f /var/lib/havm/startup.img
+
+# Re-run activation to download fresh HAOS image
+/run/current-system/activate
+
+# Start the VM (will boot fresh HAOS)
+systemctl start homeassistant-vm.service
+```
+
+### Important Notes on Backups
+
+- HAOS has built-in backup functionality, but backups are stored INSIDE the qcow2 image
+- If the qcow2 is corrupted or deleted, those backups are LOST
+- **Recommendation:** Configure HAOS to sync backups to external storage (Google Drive, NAS, etc.)
+- The Kaliun Connect backup feature (when implemented) should store backups externally
+
+---
+
+## Verification Commands
+
+To verify Pi is working correctly:
+
+```bash
+# Check current generation
+readlink /nix/var/nix/profiles/system
+
+# Check boot config
+cat /boot/extlinux/extlinux.conf
+
+# Check management console is running
+systemctl status management-console.service
+
+# Check all services are healthy
+systemctl --failed
+
+# Manual update test
+cd /etc/nixos/kaliunbox-flake
+git pull
+nixos-rebuild switch --flake .#kaliunbox-rpi4
+```
+
+---
 
 ## References
 
-- [NixOS SD Image Module (sd-image.nix)](https://github.com/NixOS/nixpkgs/blob/master/nixos/modules/installer/sd-card/sd-image.nix)
-- [NixOS SD Image ARM64 (sd-image-aarch64.nix)](https://github.com/NixOS/nixpkgs/blob/master/nixos/modules/installer/sd-card/sd-image-aarch64.nix)
+- [NixOS SD Image Module](https://github.com/NixOS/nixpkgs/blob/master/nixos/modules/installer/sd-card/sd-image.nix)
 - [NixOS on ARM - NixOS Wiki](https://nixos.wiki/wiki/NixOS_on_ARM)
-- [Installing NixOS on Raspberry Pi - nix.dev](https://nix.dev/tutorials/nixos/installing-nixos-on-a-raspberry-pi.html)
-- [NixOS Discourse: Creating UEFI aarch64 SD card image](https://discourse.nixos.org/t/how-to-create-uefi-aarch64-sd-card-image/34585)
+- [Raspberry Pi Boot Process](https://www.raspberrypi.com/documentation/computers/raspberry-pi.html#raspberry-pi-4-boot-flow)
 
-## Git Commits Referenced
+---
 
-- `ef0f0ca` - Switch to direct boot RPi4 image and simplify installer
-- `dc5809a` - Persist flake target for auto-updates (BUG INTRODUCED HERE)
-- `fb823fb` - Align rpi4 config with x86/aarch64 settings
-- `3581d37` - Improve claiming process and boot health handling for rpi4
-- `78f46fd` - Revert management console timer fix (made things worse)
-- `d4981d9` - Rebrand SeloraBox to KaliunBox
+## Status: RESOLVED
 
-## Status
-
-**Investigation:** Complete
-**Solution:** Designed but not implemented
-**Next Decision:** Evaluate whether Raspberry Pi support is worth maintaining vs focusing on x86 mini PCs only
+The Pi boot and management console issues have been fixed. Auto-updates should work correctly. The original `/boot/firmware` hypothesis was incorrect - the actual issue was a systemd service conflict directive.

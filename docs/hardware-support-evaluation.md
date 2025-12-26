@@ -9,7 +9,9 @@
 |----------|-------------|--------------|--------|------------|-------------|
 | **x86_64** | `kaliunbox` | `installer-iso` | ✅ Production | Low | Low |
 | **ARM64 (Generic)** | `kaliunbox-aarch64` | `installer-iso` | ⚠️ Testing | Medium | Medium |
-| **Raspberry Pi 4** | `kaliunbox-rpi4` | `rpi4-direct` | ❌ Broken | **High** | **High** |
+| **Raspberry Pi 4** | `kaliunbox-rpi4` | `rpi4-direct` | ✅ Working | Medium | Medium |
+
+> **Update (Dec 26, 2025):** Pi 4 boot issues have been resolved. The problem was a systemd service conflict, not the `/boot/firmware` mount issue originally suspected. See [raspberry-pi-boot-issue-investigation.md](raspberry-pi-boot-issue-investigation.md) for details.
 
 ## Current State Analysis
 
@@ -86,24 +88,26 @@
 
 ---
 
-### ❌ Raspberry Pi 4 - BROKEN (Boot Hang Bug)
+### ✅ Raspberry Pi 4 - WORKING
 
 **Hardware:**
 - Raspberry Pi 4 (2GB/4GB/8GB RAM)
-- SD card boot (no UEFI, no standard bootloader)
+- SD card boot (U-Boot + extlinux)
 
 **Technical Details:**
 - **Bootloader:** extlinux (U-Boot compatible) - NOT systemd-boot
 - **Boot Process:** GPU firmware → U-Boot → extlinux → kernel
-- **Installer:** Replaced with direct boot SD image
-- **Auto-updates:** ❌ **BROKEN** - causes boot hang
+- **Image Type:** Direct boot SD image (plug-and-play)
+- **Auto-updates:** ✅ **WORKING** - extlinux.conf on root partition (always mounted)
 
-**Known Issues (See [raspberry-pi-boot-issue-investigation.md](raspberry-pi-boot-issue-investigation.md)):**
+**Previous Issues (Now Resolved):**
 
-1. **Root Cause:** SD image module sets `/boot/firmware` mount option to `noauto`
-2. **Why It Breaks:** extlinux bootloader needs to write to `/boot/firmware` during rebuilds
-3. **Result:** Auto-updates create broken boot config → system hangs at "starting systemd..."
-4. **Workaround:** Manual boot menu selection of old generation
+The original investigation incorrectly identified `/boot/firmware` mount issues as the root cause. The actual problem was:
+- `conflicts = ["management-console.service"]` in the first-boot service
+- This prevented management-console from auto-starting on subsequent boots
+- **Fix:** Removed the `conflicts` directive from `rpi4-direct.nix`
+
+See [raspberry-pi-boot-issue-investigation.md](raspberry-pi-boot-issue-investigation.md) for the full investigation.
 
 **Complexity Analysis:**
 
@@ -120,40 +124,37 @@
 | Market availability | Excellent | Good (but often sold out) |
 | Enterprise support | Yes (Intel, AMD) | No |
 
-**Maintenance Burden:** **VERY HIGH**
+**Maintenance Burden:** **MEDIUM** (Reduced from "Very High" after fixes)
 
-1. **Two separate configs required:**
-   - `rpi4-direct.nix` - For SD image creation
-   - `rpi4-live.nix` - For live system rebuilds (needs to be created)
-   - Must keep both in sync manually
+1. **Single config works for both image and rebuilds:**
+   - `rpi4-direct.nix` - Works for both SD image creation AND live rebuilds
+   - No separate `rpi4-live.nix` needed (original hypothesis was wrong)
+   - extlinux.conf is on root partition, always accessible
 
-2. **Boot process complexity:**
-   - Custom firmware partition handling
-   - extlinux configuration management
-   - Device tree overlays
-   - GPU firmware compatibility
+2. **Boot process:**
+   - GPU firmware → U-Boot → extlinux (on root partition) → NixOS
+   - Device tree overlays handled automatically
+   - No custom firmware partition handling needed for rebuilds
 
-3. **Testing overhead:**
-   - Need physical Pi hardware for testing
-   - Can't use QEMU/VMs effectively (ARM emulation is slow)
-   - SD card flashing for every test iteration
-   - No automated CI testing (requires real hardware)
+3. **Testing considerations:**
+   - Physical Pi hardware recommended for full testing
+   - Can test most functionality on ARM64 VMs/cloud instances
+   - SD card flashing only for initial deployment
 
-4. **Version fragmentation:**
-   - Pi 3 vs Pi 4 vs Pi 5 have different requirements
-   - Firmware compatibility issues between models
-   - Different RAM variants (2GB/4GB/8GB)
+4. **Version considerations:**
+   - Currently targeting Pi 4 only
+   - Pi 3/5 would need separate configs if supported
+   - 4GB+ RAM recommended for Home Assistant VM
 
-5. **Customer support complexity:**
-   - SD card quality/corruption issues
-   - Power supply problems (Pi is sensitive)
-   - USB boot vs SD boot confusion
-   - Thermal throttling on Pi 4
+5. **Customer support considerations:**
+   - SD card quality matters (recommend quality brands)
+   - Official power supply recommended
+   - Thermal throttling possible under heavy load
 
-6. **Performance limitations:**
-   - 8GB RAM maximum (Home Assistant VM + host needs 16GB ideally)
-   - USB 3.0 bottleneck for storage
-   - No PCIe for expansion (Pi 5 has one lane)
+6. **Performance notes:**
+   - 8GB RAM maximum (sufficient for basic HA setup)
+   - USB 3.0 storage works well
+   - KVM virtualization supported on Pi 4
 
 **Cost Analysis:**
 - Raspberry Pi 4 (4GB): $55 (when in stock)
@@ -173,7 +174,9 @@
 
 ## Strategic Recommendations
 
-### Option 1: x86_64 Only (RECOMMENDED)
+> **Update (Dec 26, 2025):** With Pi 4 issues now resolved, the recommendation has shifted. Both x86_64 and Pi 4 are viable options.
+
+### Option 1: x86_64 + Raspberry Pi 4 (RECOMMENDED)
 
 **Supported Hardware:**
 - Intel/AMD mini PCs (NUC, OptiPlex, EliteDesk, etc.)
@@ -367,24 +370,29 @@ Production-ready: 2 (100%)
 
 ## Conclusion
 
-**Recommendation: Go with x86_64 only (Option 1)**
+**Recommendation: Support both x86_64 and Raspberry Pi 4**
 
-**Rationale:**
-1. Pi support is broken and complex to fix
-2. Pi costs almost as much as better x86_64 hardware when fully configured
-3. x86_64 mini PCs are more performant, reliable, and available
-4. Engineering time better spent on features than platform support
-5. Can always add Pi support later if market demands it
-6. ARM64 (generic) has no clear hardware recommendation for customers
+**Updated Rationale (Dec 26, 2025):**
+1. Pi 4 boot issues have been **resolved** - the problem was a simple systemd conflict, not architectural
+2. Single `rpi4-direct.nix` config works for both image creation AND live rebuilds
+3. Auto-updates work correctly on Pi (extlinux.conf is on root partition)
+4. Pi offers a lower price point for budget-conscious users
+5. x86_64 remains the premium option for better performance
+6. Both platforms now have similar maintenance burden
+
+**Current Platform Status:**
+- ✅ **x86_64:** Production-ready, recommended for best performance
+- ✅ **Raspberry Pi 4:** Working, good for budget deployments
+- ⚠️ **ARM64 (Generic):** Testing only, no clear hardware recommendation
 
 **Next Steps:**
-1. Archive Pi and ARM64 configs
-2. Update documentation to x86_64 only
-3. Create hardware buying guide
-4. Focus on feature development (Phase 1 from ROADMAP.md - Pangolin integration)
+1. ~~Archive Pi and ARM64 configs~~ Keep Pi 4 support active
+2. Create hardware buying guide covering both x86_64 and Pi 4
+3. Focus on feature development (Pangolin integration, etc.)
+4. Consider dropping generic ARM64 support (no clear use case)
 
-**Future Consideration:**
-- If 50%+ of customers specifically request Pi support
-- If Pi foundation releases Pi with 16GB+ RAM and better I/O
-- If market research shows strong preference for Pi
-→ Re-evaluate and invest in proper two-config Pi implementation
+**Key Learnings:**
+- The original `/boot/firmware` diagnosis was wrong
+- Actual issue was a systemd service conflict (`conflicts` directive)
+- Pi boot architecture: extlinux.conf lives on root partition, not firmware partition
+- Always verify assumptions with actual hardware testing

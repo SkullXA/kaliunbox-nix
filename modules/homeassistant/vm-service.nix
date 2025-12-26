@@ -195,20 +195,6 @@ in {
               echo "Skipping USB passthrough in nested VM environment"
             fi
 
-            # CPU model selection based on architecture
-            # - x86: qemu64 for compatibility (works with KVM and TCG)
-            # - ARM: host with KVM, or cortex-a72 (Pi 4 CPU) for TCG fallback
-            if [ -e /dev/kvm ] && [ -r /dev/kvm ]; then
-              echo "KVM device found - QEMU will use hardware acceleration"
-              CPU_MODEL="host"
-            else
-              echo "KVM not available - QEMU will use software emulation (TCG)"
-              ${if haConfig.isAarch64
-                then ''CPU_MODEL="cortex-a72"  # Raspberry Pi 4 CPU''
-                else ''CPU_MODEL="qemu64"''
-              }
-            fi
-
             # Common QEMU args
             QEMU_ARGS=(
               -name homeassistant
@@ -219,25 +205,15 @@ in {
       }
               -m 4096
               -smp $(nproc)
-              -cpu $CPU_MODEL
+              -cpu host
               -drive if=pflash,format=raw,readonly=on,file=${haConfig.uefiCodePath}
               -drive if=pflash,format=raw,file=/var/lib/havm/efivars.fd
               -drive file=${haConfig.haosImagePath},if=virtio,format=${haConfig.haosFormat},cache=writeback
               # Startup disk with fallback boot script (UEFI shell auto-executes startup.nsh)
               -drive file=/var/lib/havm/startup.img,if=virtio,format=raw,readonly=on
-              # Serial console:
-              # - aarch64: keep a socket for interactive console access (homeassistant-console uses it)
-              # - x86: send guest serial to journald via stdio so we can see HAOS boot/progress in logs
-              ${
-                if haConfig.isAarch64
-                then ''
-                  -chardev socket,path=/var/lib/havm/console.sock,server=on,wait=off,id=serial0
-                  -serial chardev:serial0
-                ''
-                else ''
-                  -serial stdio
-                ''
-              }
+              # Serial console for debugging/CLI access (same for both architectures)
+              -chardev socket,path=/var/lib/havm/console.sock,server=on,wait=off,id=serial0
+              -serial chardev:serial0
               # QMP socket for machine control (used for graceful shutdown)
               -qmp unix:/var/lib/havm/qmp.sock,server,nowait
               # Guest agent for VM management
