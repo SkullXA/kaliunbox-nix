@@ -17,7 +17,11 @@
   # Boot configuration
   boot = {
     loader = {
-      systemd-boot.enable = true;
+      systemd-boot = {
+        enable = true;
+        # Limit boot menu to 5 generations (saves space and keeps menu manageable)
+        configurationLimit = 5;
+      };
       efi.canTouchEfiVariables = true;
       timeout = 5; # 5 second timeout to allow boot menu access for troubleshooting
     };

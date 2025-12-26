@@ -1,12 +1,12 @@
-# SeloraBox Maintenance Commands
+# KaliunBox Maintenance Commands
 
-This document covers the maintenance commands available on SeloraBox for debugging, troubleshooting, and administration.
+This document covers the maintenance commands available on KaliunBox for debugging, troubleshooting, and administration.
 
 ## Home Assistant Commands
 
 ### `ha` - Home Assistant CLI
 
-Access the Home Assistant CLI directly from the SeloraBox host:
+Access the Home Assistant CLI directly from the KaliunBox host:
 
 ```bash
 ha help                    # Show available commands
@@ -46,7 +46,7 @@ Provides connection instructions based on architecture:
 
 ## Snapshot Management
 
-SeloraBox uses qcow2 internal snapshots to protect your Home Assistant data before system updates.
+KaliunBox uses qcow2 internal snapshots to protect your Home Assistant data before system updates.
 
 ### `havm-snapshot-list`
 
@@ -112,64 +112,64 @@ Exit codes:
 
 ## System Updates
 
-### `selorabox-update`
+### `kaliunbox-update`
 
 Trigger a manual system update:
 
 ```bash
-selorabox-update
+kaliunbox-update
 ```
 
 This runs the same update process that happens automatically every 30 minutes.
 
-### `selorabox-update-logs`
+### `kaliunbox-update-logs`
 
 Follow the auto-update service logs:
 
 ```bash
-selorabox-update-logs
+kaliunbox-update-logs
 ```
 
-### `selorabox-rollback`
+### `kaliunbox-rollback`
 
 Roll back to the previous NixOS configuration:
 
 ```bash
-selorabox-rollback
+kaliunbox-rollback
 ```
 
 Use this if a system update causes problems. The system will reboot into the previous working configuration.
 
 ## Boot Health Check
 
-### `selorabox-boot-health`
+### `kaliunbox-boot-health`
 
 Check system health after boot:
 
 ```bash
-selorabox-boot-health
+kaliunbox-boot-health
 ```
 
 This is run automatically after system updates to verify Home Assistant is accessible.
 
-### `selorabox-mark-good`
+### `kaliunbox-mark-good`
 
 Mark the current boot as successful:
 
 ```bash
-selorabox-mark-good
+kaliunbox-mark-good
 ```
 
 This prevents automatic rollback on the next boot.
 
-## SeloraHomes Services
+## Kaliun Connect Services
 
-### `selorahomes-status`
+### `kaliun-status`
 
-Check the status of SeloraHomes management services:
+Check the status of Kaliun Connect management services:
 
 ```bash
-selorahomes-status
+kaliun-status
 ```
 
 ### `newt-status`
@@ -192,19 +192,19 @@ journalctl -u homeassistant-vm -f
 journalctl -u homeassistant-watchdog -f
 
 # Auto-update service
-journalctl -u selorahomes-auto-update -f
+journalctl -u kaliun-auto-update -f
 
 # Boot health check
-journalctl -u selorahomes-boot-health-check -f
+journalctl -u kaliunbox-boot-health -f
 
 # Token refresh service
-journalctl -u selorahomes-token-refresh -f
+journalctl -u kaliun-token-refresh -f
 
 # Config sync service
-journalctl -u selorahomes-config-sync -f
+journalctl -u kaliun-config-sync -f
 
 # Health reporter
-journalctl -u selorahomes-health-reporter -f
+journalctl -u kaliun-health-reporter -f
 ```
 
 ## USB Device Management
@@ -218,7 +218,7 @@ If a device isn't recognized:
 
 ## Network Modes
 
-SeloraBox automatically detects its environment and configures networking:
+KaliunBox automatically detects its environment and configures networking:
 
 - **Bridge mode** (bare metal): VM gets its own IP from network DHCP
 - **User mode** (nested/VM): Access via host IP on port 8123

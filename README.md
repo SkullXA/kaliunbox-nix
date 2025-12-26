@@ -99,15 +99,15 @@ KaliunBox (NixOS Host)
 └── last_pull           # Timestamp of last configuration update
 
 Logs are available via journald:
-- `journalctl -u selorahomes-auto-update.service`
-- `journalctl -u selorahomes-health-reporter.service`
-- `journalctl -u selorahomes-token-refresh.service`
-- `journalctl -u selorabox-auto-claim.service`
+- `journalctl -u kaliun-auto-update.service`
+- `journalctl -u kaliun-health-reporter.service`
+- `journalctl -u kaliun-token-refresh.service`
+- `journalctl -u kaliunbox-auto-claim.service`
 ```
 
 ### Configuration File Format
 
-`/var/lib/selorahomes/config.json`:
+`/var/lib/kaliun/config.json`:
 
 ```json
 {
@@ -141,7 +141,7 @@ Logs are available via journald:
 
 ```bash
 # System status
-selorahomes-status          # Display management dashboard
+kaliun-status               # Display management dashboard
 
 # Home Assistant
 homeassistant-status        # Check HA VM status
@@ -155,9 +155,9 @@ ha host reboot              # Reboot HAOS
 newt-status                 # Check Newt container status
 
 # Updates
-selorabox-update            # Trigger manual update
-selorabox-update-logs       # View update logs
-selorabox-rollback          # Rollback to previous generation
+kaliunbox-update            # Trigger manual update
+kaliunbox-update-logs       # View update logs
+kaliunbox-rollback          # Rollback to previous generation
 ```
 
 ### Home Assistant VM Console Access
@@ -169,7 +169,7 @@ VNC is available on localhost:5900. To connect remotely:
 
 ```bash
 # From your workstation, create SSH tunnel:
-ssh -L 5900:localhost:5900 root@<selorabox-ip>
+ssh -L 5900:localhost:5900 root@<kaliunbox-ip>
 
 # Then connect with a VNC client to localhost:5900
 # Note: macOS Screen Sharing requires a password. Use TigerVNC or RealVNC instead:
@@ -193,7 +193,7 @@ On ARM64 systems, serial console is available via `homeassistant-console`.
 ### Web Interfaces
 
 - **Home Assistant**: `http://<ha-vm-ip>:8123`
-- **Connect Management**: `https://connect.selorahomes.com/installations/<install-id>`
+- **Connect Management**: `https://connect.kaliun.com/installations/<install-id>`
 
 ## Development
 
@@ -288,7 +288,7 @@ The flake automatically detects your system architecture:
 
 ```bash
 # Build system configuration (auto-detects architecture)
-nix build .#nixosConfigurations.selorabox.config.system.build.toplevel
+nix build .#nixosConfigurations.kaliunbox.config.system.build.toplevel
 
 # Build installer ISO (builds for your current architecture)
 nix build .#installer-iso
@@ -308,12 +308,12 @@ nix fmt
 
 ```bash
 # Build and run in QEMU (uses your current architecture)
-nixos-rebuild build-vm --flake .#selorabox
-./result/bin/run-selorabox-vm
+nixos-rebuild build-vm --flake .#kaliunbox
+./result/bin/run-kaliunbox-vm
 
 # Or specify architecture:
-nixos-rebuild build-vm --flake .#selorabox              # x86_64
-nixos-rebuild build-vm --flake .#selorabox-aarch64      # ARM64
+nixos-rebuild build-vm --flake .#kaliunbox              # x86_64
+nixos-rebuild build-vm --flake .#kaliunbox-aarch64      # ARM64
 ```
 
 ### Repository Structure
@@ -374,13 +374,13 @@ nixos-rebuild build-vm --flake .#selorabox-aarch64      # ARM64
 
 ```bash
 # Trigger update now
-selorabox-update
+kaliunbox-update
 
 # View update logs
-selorabox-update-logs
+kaliunbox-update-logs
 
 # Rollback if needed
-selorabox-rollback
+kaliunbox-rollback
 ```
 
 ## Health Monitoring
@@ -417,7 +417,7 @@ journalctl -u homeassistant-vm.service
 homeassistant-status
 
 # Access VM console via VNC
-ssh -L 5900:localhost:5900 root@<selorabox-ip>
+ssh -L 5900:localhost:5900 root@<kaliunbox-ip>
 # Then connect VNC client to localhost:5900
 ```
 
@@ -430,19 +430,19 @@ systemctl status container@newt-agent.service
 nixos-container run newt-agent -- journalctl -u newt-agent -f
 
 # Check configuration
-jq . /var/lib/selorahomes/config.json
+jq . /var/lib/kaliun/config.json
 ```
 
 **Auto-update failing:**
 ```bash
 # View update logs
-journalctl -u selorahomes-auto-update.service -f
+journalctl -u kaliun-auto-update.service -f
 
 # Check Git status
-cd /etc/nixos/selorabox-flake && git status
+cd /etc/nixos/kaliunbox-flake && git status
 
 # Manual update
-selorabox-update
+kaliunbox-update
 ```
 
 **Network bridge issues:**
@@ -461,17 +461,17 @@ bridge link show
 
 **Boot to previous generation:**
 - At boot, select previous generation from bootloader menu
-- Or run: `selorabox-rollback`
+- Or run: `kaliunbox-rollback`
 
 **Reset configuration:**
 ```bash
 # Re-clone flake repository
 cd /etc/nixos
-rm -rf selorabox-flake
-git clone https://gitlab.com/selorahomes/products/selorabox-nix.git selorabox-flake
+rm -rf kaliunbox-flake
+git clone https://github.com/SkullXA/kaliunbox-nix.git kaliunbox-flake
 
 # Rebuild
-nixos-rebuild switch --flake /etc/nixos/selorabox-flake#selorabox
+nixos-rebuild switch --flake /etc/nixos/kaliunbox-flake#kaliunbox
 ```
 
 ## CI/CD Pipeline
@@ -493,7 +493,7 @@ nixos-rebuild switch --flake /etc/nixos/selorabox-flake#selorabox
 3. **Deploy**
    - `update-index` - Updates downloads page on S3
 
-**Note**: ISO builds run automatically on tags, or manually on the default branch. ISOs are uploaded to S3 and available at https://downloads.selorahomes.com/
+**Note**: ISO builds run automatically on tags, or manually on the default branch.
 
 ### Running CI Locally
 
@@ -541,10 +541,10 @@ Follow conventional commits:
 
 ## License
 
-Internal use - Selora Homes
+Proprietary - Kaliun
 
 ## Support
 
-- **Issues**: https://gitlab.com/selorahomes/products/selorabox-nix/issues
-- **Support Email**: support@selorahomes.com
+- **Issues**: https://github.com/SkullXA/kaliunbox-nix/issues
+- **Support Email**: support@kaliun.com
 

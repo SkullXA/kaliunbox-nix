@@ -1,6 +1,6 @@
 # Plymouth Theme Images
 
-This directory contains image assets for the SeloraBox Plymouth boot theme.
+This directory contains image assets for the KaliunBox Plymouth boot theme.
 
 ## Required Images
 
@@ -11,7 +11,7 @@ This directory contains image assets for the SeloraBox Plymouth boot theme.
 - This should be created by the design team
 
 ### logo.png
-- Selora logo
+- Kaliun logo
 - Recommended size: 400x200 (or appropriate aspect ratio)
 - Transparent background (PNG with alpha channel)
 - Positioned at top center of screen
@@ -34,7 +34,7 @@ convert -size 1920x1080 xc:'#1a237e' background.png
 # Logo placeholder (white text on transparent)
 convert -size 400x200 xc:transparent \
   -gravity center -pointsize 48 -fill white \
-  -annotate +0+0 "SELORA" \
+  -annotate +0+0 "KALIUN" \
   logo.png
 
 # QR code placeholder (white frame)

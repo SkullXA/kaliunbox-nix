@@ -308,7 +308,7 @@ docker run -d \
 
 ### 🔵 Phase 2: Notification Center
 
-**Goal**: Real-time notifications for device events (like Selora's Notification_Center.png)
+**Goal**: Real-time notifications for device events
 
 | Feature | Location | Status | Description |
 |---------|----------|--------|-------------|
@@ -462,7 +462,7 @@ kaliunbox-nix/
 - ✅ **Supabase backend** - PostgreSQL database with auth
 - ✅ **Real user/password authentication** - No more magic links only
 - ✅ **Google & GitHub OAuth** - Social login via Supabase Auth
-- ✅ **Detailed installation dashboard** - Like Selora's with full metrics
+- ✅ **Detailed installation dashboard** - With full metrics
 - ✅ **Health data visualization** - Memory, disk, load average with progress bars
 - ✅ **Log collection endpoint** - `POST /api/v1/installations/:id/logs`
 - ✅ **Service status cards** - Home Assistant & Remote Access status
@@ -483,7 +483,7 @@ Will need **Option B: Self-hosted Pangolin (Remote Node)** for production.
 | Option A: Pangolin Cloud | 🔄 Testing | 1 free site for development |
 | Option B: Remote Node (VPS) | ⬜ TODO | Unlimited sites, $5/mo VPS |
 
-### Applied Selora updates:
+### Applied updates:
 - ✅ DNS fallback (1.1.1.1, 8.8.8.8) + resolvconf
 - ✅ Dynamic trusted_proxies (specific IPs, not CIDR ranges)
 - ✅ IP change monitoring (updates proxy config on DHCP renewal)

@@ -46,10 +46,10 @@ macOS Host (aarch64)
 
 1. Install UTM on macOS
 2. Create a NixOS VM using the aarch64 ISO
-3. Clone the flake to `/etc/nixos/selorabox-flake`
+3. Clone the flake to `/etc/nixos/kaliunbox-flake`
 4. Build using the aarch64 configuration:
    ```bash
-   nixos-rebuild switch --flake /etc/nixos/selorabox-flake#selorabox-aarch64
+   nixos-rebuild switch --flake /etc/nixos/kaliunbox-flake#kaliunbox-aarch64
    ```
 
 ## Deploying Changes
@@ -58,8 +58,8 @@ To deploy changes to a development VM:
 
 ```bash
 # Copy files and rebuild
-scp modules/homeassistant/*.nix root@<VM_IP>:/etc/nixos/selorabox-flake/modules/homeassistant/
-ssh root@<VM_IP> 'nixos-rebuild switch --flake /etc/nixos/selorabox-flake#selorabox-aarch64'
+scp modules/homeassistant/*.nix root@<VM_IP>:/etc/nixos/kaliunbox-flake/modules/homeassistant/
+ssh root@<VM_IP> 'nixos-rebuild switch --flake /etc/nixos/kaliunbox-flake#kaliunbox-aarch64'
 ```
 
 ## Troubleshooting

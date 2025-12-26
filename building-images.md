@@ -2,12 +2,12 @@
 
 ## Overview
 
-SeloraBox supports both **x86_64** and **ARM64 (aarch64)** architectures as production targets:
+KaliunBox supports both **x86_64** and **ARM64 (aarch64)** architectures as production targets:
 
 - **x86_64-linux**: Traditional PC hardware, Intel NUCs, mini PCs
 - **aarch64-linux**: ARM64 hardware (Raspberry Pi 5, ARM servers, Apple Silicon VMs)
 
-Both architectures are built and published by CI to https://downloads.selorahomes.com/
+Both architectures are built and published by CI.
 
 ## Target Hardware
 
@@ -37,7 +37,7 @@ This creates a `.img.zst` file that can be flashed directly to an SD card with n
 # Build ARM64 ISO directly on your Mac (fast!)
 nix build .#packages.aarch64-linux.installer-iso
 
-# Result will be at ./result/iso/selorabox-installer-*.iso
+# Result will be at ./result/iso/kaliunbox-installer-*.iso
 ```
 
 This is the **recommended approach for development** on Apple Silicon Macs:
@@ -76,18 +76,16 @@ nix build .#packages.x86_64-linux.installer-iso
 nix build .#packages.aarch64-linux.installer-iso
 ```
 
-ISOs are available at https://downloads.selorahomes.com/
-
 ## NixOS Configurations
 
 The flake provides separate configurations for each architecture:
 
 ```
 nixosConfigurations:
-  selorabox                    # x86_64 (production)
-  selorabox-installer          # x86_64 installer
-  selorabox-aarch64            # ARM64 (development)
-  selorabox-installer-aarch64  # ARM64 installer
+  kaliunbox                    # x86_64 (production)
+  kaliunbox-installer          # x86_64 installer
+  kaliunbox-aarch64            # ARM64 (development)
+  kaliunbox-installer-aarch64  # ARM64 installer
 ```
 
 ## Packages
@@ -115,9 +113,8 @@ packages.aarch64-linux:
 1. **Edit code** on your Mac
 2. **Build ARM64 ISO** directly: `nix build .#packages.aarch64-linux.installer-iso`
 3. **Test in ARM VM** (UTM, Parallels, etc.)
-4. **Push to GitLab**
+4. **Push to GitHub**
 5. **CI builds both architectures**
-6. **ISOs uploaded to S3** at https://downloads.selorahomes.com/
 
 ### Why Not Cross-Compile?
 
@@ -141,10 +138,9 @@ NixOS abstracts hardware differences, ensuring consistent behavior across platfo
 
 ## Downloads
 
-Production ISOs for both architectures are available at:
-https://downloads.selorahomes.com/
+Production ISOs for both architectures are available from GitHub releases.
 
 Files (version is either a git tag or short commit SHA):
-- `selorabox-<version>-x86_64.iso` - For x86_64 hardware
-- `selorabox-<version>-aarch64.iso` - For ARM64 hardware
+- `kaliunbox-<version>-x86_64.iso` - For x86_64 hardware
+- `kaliunbox-<version>-aarch64.iso` - For ARM64 hardware
 - `.sha256` checksum files for verification

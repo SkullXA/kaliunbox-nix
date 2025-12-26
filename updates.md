@@ -1,10 +1,10 @@
-# SeloraBox Updates
+# KaliunBox Updates
 
 ## How Updates Work
 
-SeloraBox has two independent update systems that work together to keep your system secure and up-to-date:
+KaliunBox has two independent update systems that work together to keep your system secure and up-to-date:
 
-### 1. SeloraBox System Updates (Automatic)
+### 1. KaliunBox System Updates (Automatic)
 
 - **Frequency**: Every 30 minutes
 - **What updates**: NixOS host system, networking, VM management
@@ -27,15 +27,15 @@ Update Home Assistant when you're ready, just like you would on any other Home A
 
 ### VM Snapshots
 
-Before each SeloraBox system update, a snapshot of your Home Assistant VM is created. This protects your configuration and data in case anything goes wrong during an update.
+Before each KaliunBox system update, a snapshot of your Home Assistant VM is created. This protects your configuration and data in case anything goes wrong during an update.
 
 ### Watchdog
 
-SeloraBox continuously monitors Home Assistant health and will automatically restart the VM if it becomes unresponsive. This ensures your smart home stays running even if Home Assistant encounters an issue.
+KaliunBox continuously monitors Home Assistant health and will automatically restart the VM if it becomes unresponsive. This ensures your smart home stays running even if Home Assistant encounters an issue.
 
 ### Boot Health Check
 
-After system updates, SeloraBox verifies that Home Assistant is accessible. If Home Assistant doesn't come up properly, the system automatically rolls back to the previous working configuration.
+After system updates, KaliunBox verifies that Home Assistant is accessible. If Home Assistant doesn't come up properly, the system automatically rolls back to the previous working configuration.
 
 ## USB Device Support
 
@@ -51,10 +51,10 @@ USB devices like Zigbee coordinators (e.g., Sonoff ZBDongle-P, ConBee II) and Z-
 
 1. Wait a few minutes - Home Assistant may be starting up after an update
 2. The watchdog will automatically restart the VM if it's unresponsive
-3. Check if the SeloraBox is powered on and connected to your network
+3. Check if the KaliunBox is powered on and connected to your network
 
 ### USB device not showing in Home Assistant
 
 1. Unplug and replug the USB device
-2. Check that the device is directly connected to SeloraBox (not through an unpowered hub)
+2. Check that the device is directly connected to KaliunBox (not through an unpowered hub)
 3. Restart Home Assistant from Settings > System > Restart

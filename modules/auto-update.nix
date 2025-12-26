@@ -282,11 +282,73 @@ in {
     updateScript
     (pkgs.writeScriptBin "kaliunbox-update" ''
       #!${pkgs.bash}/bin/bash
-      echo "Triggering manual system update..."
-      ${pkgs.systemd}/bin/systemctl start kaliun-auto-update.service
       echo ""
-      echo "Following update log (Ctrl+C to stop):"
-      ${pkgs.systemd}/bin/journalctl -u kaliun-auto-update.service -f
+      echo "╔══════════════════════════════════════════╗"
+      echo "║       KaliunBox System Update            ║"
+      echo "╚══════════════════════════════════════════╝"
+      echo ""
+
+      # Check if update is already running
+      if ${pkgs.systemd}/bin/systemctl is-active --quiet kaliun-auto-update.service; then
+        echo "⚠️  Update already in progress, following logs..."
+        echo ""
+      else
+        echo "Starting update..."
+        echo ""
+        # Start the service (don't wait for it)
+        ${pkgs.systemd}/bin/systemctl start kaliun-auto-update.service
+      fi
+
+      # Follow logs until the service stops (--no-tail shows from beginning of this run)
+      # We use a background process + wait to handle the service completion
+      echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+      # Show logs in real-time until service completes
+      while ${pkgs.systemd}/bin/systemctl is-active --quiet kaliun-auto-update.service 2>/dev/null; do
+        ${pkgs.systemd}/bin/journalctl -u kaliun-auto-update.service -n 1 --no-pager -o cat 2>/dev/null | tail -1
+        sleep 0.5
+      done
+
+      # Show all logs from this invocation
+      echo ""
+      echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+      echo ""
+
+      # Check result
+      RESULT=$(${pkgs.systemd}/bin/systemctl show kaliun-auto-update.service --property=Result --value)
+
+      if [ "$RESULT" = "success" ]; then
+        # Get the generation info
+        CURRENT_GEN=$(readlink /nix/var/nix/profiles/system 2>/dev/null | sed 's/system-\([0-9]*\)-link/\1/' || echo "unknown")
+        echo "✅ Update completed successfully!"
+        echo ""
+        echo "   Current generation: $CURRENT_GEN"
+        echo ""
+
+        # Check if rebuild file exists and show status
+        if [ -f /var/lib/kaliun/last_rebuild ]; then
+          REBUILD_STATUS=$(cat /var/lib/kaliun/last_rebuild)
+          case "$REBUILD_STATUS" in
+            success)
+              echo "   Status: New configuration applied"
+              ;;
+            no_updates)
+              echo "   Status: Already up to date (no changes)"
+              ;;
+            skipped)
+              echo "   Status: No updates available"
+              ;;
+          esac
+        fi
+        echo ""
+      else
+        echo "❌ Update failed!"
+        echo ""
+        echo "   Run 'kaliunbox-update-logs' to see detailed logs"
+        echo "   Run 'kaliunbox-rollback' to revert to previous version"
+        echo ""
+        exit 1
+      fi
     '')
 
     (pkgs.writeScriptBin "kaliunbox-update-logs" ''
@@ -296,8 +358,35 @@ in {
 
     (pkgs.writeScriptBin "kaliunbox-rollback" ''
       #!${pkgs.bash}/bin/bash
-      echo "Rolling back to previous system generation..."
-      /run/current-system/sw/bin/nixos-rebuild switch --rollback
+      echo ""
+      echo "╔══════════════════════════════════════════╗"
+      echo "║       KaliunBox System Rollback          ║"
+      echo "╚══════════════════════════════════════════╝"
+      echo ""
+
+      # Get current generation before rollback
+      CURRENT_GEN=$(readlink /nix/var/nix/profiles/system 2>/dev/null | sed 's/system-\([0-9]*\)-link/\1/' || echo "unknown")
+      echo "Current generation: $CURRENT_GEN"
+      echo ""
+      echo "Rolling back to previous generation..."
+      echo ""
+
+      if /run/current-system/sw/bin/nixos-rebuild switch --rollback; then
+        NEW_GEN=$(readlink /nix/var/nix/profiles/system 2>/dev/null | sed 's/system-\([0-9]*\)-link/\1/' || echo "unknown")
+        echo ""
+        echo "✅ Rollback completed successfully!"
+        echo ""
+        echo "   Previous generation: $CURRENT_GEN"
+        echo "   Current generation:  $NEW_GEN"
+        echo ""
+      else
+        echo ""
+        echo "❌ Rollback failed!"
+        echo ""
+        echo "   Run 'journalctl -u nixos-rebuild -n 50' for details"
+        echo ""
+        exit 1
+      fi
     '')
   ];
 }

@@ -43,7 +43,13 @@
     # Use the extlinux bootloader (standard for Pi)
     loader = {
       grub.enable = false;
-      generic-extlinux-compatible.enable = true;
+      generic-extlinux-compatible = {
+        enable = true;
+        # Limit boot menu to 5 generations (saves space and keeps menu manageable)
+        configurationLimit = 5;
+      };
+      # Timeout in seconds before auto-boot (0 = instant boot to default)
+      timeout = 5;
     };
 
     # Console for debugging + KVM support
