@@ -77,7 +77,7 @@
     ${pkgs.xz}/bin/xz -d "''${IMG}.xz"
 
     # Auto-size the qcow2 based on available disk space
-    # Reserve 5GB for NixOS system, give the rest to HAOS (min 10GB, max 200GB)
+    # Reserve 10GB for NixOS system (base ~6GB + generations + logs + updates buffer)
     DISK_DIR="$(dirname "$IMG")"
     AVAILABLE_KB=$(df -k "$DISK_DIR" | tail -1 | awk '{print $4}')
     AVAILABLE_GB=$((AVAILABLE_KB / 1024 / 1024))
@@ -86,8 +86,8 @@
     CURRENT_SIZE_BYTES=$(${pkgs.qemu}/bin/qemu-img info --output=json "$IMG" | ${pkgs.jq}/bin/jq -r '."virtual-size"')
     CURRENT_SIZE_GB=$((CURRENT_SIZE_BYTES / 1024 / 1024 / 1024))
 
-    # Calculate target: available space minus 5GB buffer, clamped to 10-200GB range
-    RESERVE_GB=5
+    # Calculate target: available space minus 10GB buffer, clamped to 10-200GB range
+    RESERVE_GB=10
     TARGET_GB=$((AVAILABLE_GB - RESERVE_GB + CURRENT_SIZE_GB))
 
     # Clamp to reasonable range
