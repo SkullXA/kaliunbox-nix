@@ -90,6 +90,9 @@ in {
     serviceConfig = {
       Type = "oneshot";
       User = "root";
+      RemainAfterExit = true;
+      # Timeout for the entire download+decompress (30 min should be plenty even on slow connections)
+      TimeoutStartSec = "30min";
     };
     script = "${ensureScript}/bin/havm-ensure-image";
   };

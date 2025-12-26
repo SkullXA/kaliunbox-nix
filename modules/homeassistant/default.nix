@@ -31,36 +31,13 @@ in {
     groups.kvm = {};
   };
 
-  # Download Home Assistant OS image at activation
+  # NOTE: Home Assistant OS image download is handled by havm-ensure-image.service
+  # (see image-ensure.nix), which runs after network-online.target.
+  # We do NOT download during activation because:
+  # 1. Network may not be ready during activation (before systemd starts)
+  # 2. curl without timeout can hang indefinitely, blocking boot at "starting systemd..."
+  # 3. The image-ensure service has proper retries, progress logging, and validation
   system.activationScripts = {
-    downloadHomeAssistant = lib.stringAfter ["users"] ''
-      if [ ! -f "${haConfig.haosImagePath}" ] || [ ! -s "${haConfig.haosImagePath}" ]; then
-        echo "Downloading Home Assistant OS ${haConfig.haosVersion}..."
-        mkdir -p $(dirname "${haConfig.haosImagePath}")
-        rm -f "${haConfig.haosImagePath}" "${haConfig.haosImagePath}.tmp" "${haConfig.haosImagePath}.xz"
-
-        # Fresh image means HA needs to reinitialize - delete the initialization marker
-        rm -f /var/lib/havm/ha_initialized
-
-        # Download to temp file first, then decompress
-        # xz -d removes .xz extension automatically, producing ${haConfig.haosImagePath}
-        # Note: activation output is only visible during nixos-rebuild; runtime boot logs come from the VM service.
-        # Don't exit on failure - network may not be ready yet (especially on first boot).
-        # The image-ensure service will retry the download when network is available.
-        if ${pkgs.curl}/bin/curl --fail --show-error --cacert ${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt -L -o "${haConfig.haosImagePath}.xz" "${haConfig.haosUrl}"; then
-          ${pkgs.xz}/bin/xz -d "${haConfig.haosImagePath}.xz"
-        else
-          echo "WARNING: Failed to download Home Assistant OS image (network may not be ready)"
-          echo "The image will be downloaded when the VM service starts."
-          rm -f "${haConfig.haosImagePath}.xz"
-        fi
-      fi
-      # Only set permissions if file exists
-      if [ -f "${haConfig.haosImagePath}" ]; then
-        chown havm:kvm "${haConfig.haosImagePath}"
-        chmod 660 "${haConfig.haosImagePath}"
-      fi
-    '';
 
     # Create directory for Home Assistant VM data
     havmDirectories = lib.stringAfter ["users"] ''
