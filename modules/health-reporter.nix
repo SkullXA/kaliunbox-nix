@@ -46,14 +46,36 @@
     ROOT_USED=$(${pkgs.coreutils}/bin/df -B1 / | ${pkgs.gawk}/bin/awk 'NR==2 {print $3}')
     ROOT_TOTAL=$(${pkgs.coreutils}/bin/df -B1 / | ${pkgs.gawk}/bin/awk 'NR==2 {print $2}')
 
-    # HA VM qcow2 disk info (virtual disk size and actual usage)
+    # HA VM disk info - get actual usage from inside the VM via guest agent
     QCOW2_FILE="/var/lib/kaliun/home-assistant.qcow2"
     HA_DISK_USED=0
     HA_DISK_TOTAL=0
+    HA_QCOW2_SIZE=0
+
     if [ -f "$QCOW2_FILE" ]; then
+      # Get qcow2 virtual size and actual sparse file size
       QEMU_IMG_INFO=$(${pkgs.qemu}/bin/qemu-img info --force-share --output=json "$QCOW2_FILE" 2>/dev/null || echo "{}")
-      HA_DISK_USED=$(echo "$QEMU_IMG_INFO" | ${pkgs.jq}/bin/jq -r '."actual-size" // 0')
       HA_DISK_TOTAL=$(echo "$QEMU_IMG_INFO" | ${pkgs.jq}/bin/jq -r '."virtual-size" // 0')
+      HA_QCOW2_SIZE=$(echo "$QEMU_IMG_INFO" | ${pkgs.jq}/bin/jq -r '."actual-size" // 0')
+
+      # Try to get actual disk usage from inside the VM via cached ha-disk.json (populated by info-fetcher)
+      if [ -f /var/lib/havm/ha-disk.json ]; then
+        DISK_INFO=$(cat /var/lib/havm/ha-disk.json 2>/dev/null)
+        if [ -n "$DISK_INFO" ]; then
+          # Use HA's reported disk usage (in bytes)
+          HA_DISK_USED=$(echo "$DISK_INFO" | ${pkgs.jq}/bin/jq -r '.used_bytes // 0' 2>/dev/null || echo "0")
+          HA_DISK_TOTAL_FROM_VM=$(echo "$DISK_INFO" | ${pkgs.jq}/bin/jq -r '.total_bytes // 0' 2>/dev/null || echo "0")
+          # Use VM's reported total if available (more accurate than qcow2 virtual size)
+          if [ "$HA_DISK_TOTAL_FROM_VM" != "0" ]; then
+            HA_DISK_TOTAL=$HA_DISK_TOTAL_FROM_VM
+          fi
+        fi
+      fi
+
+      # Fallback: if no disk info from VM, use qcow2 actual-size as approximation
+      if [ "$HA_DISK_USED" = "0" ]; then
+        HA_DISK_USED=$HA_QCOW2_SIZE
+      fi
     fi
 
     # System info - NixOS generation
@@ -380,7 +402,7 @@ in {
     wantedBy = ["timers.target"];
     timerConfig = {
       OnBootSec = "2min";
-      OnUnitActiveSec = "15min";
+      OnUnitActiveSec = "5min";  # Report every 5 minutes for near real-time dashboard updates
       Unit = "kaliun-health-reporter.service";
       Persistent = true;
     };

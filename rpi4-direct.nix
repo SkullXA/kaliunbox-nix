@@ -140,7 +140,13 @@
     # Prevent management-console from fighting for tty1 during claiming
     conflicts = ["management-console.service"];
     before = ["management-console.service" "kaliunbox-boot-health.service"];
-    
+
+    # Only run if not yet claimed (! means "if NOT exists")
+    # This must be in unitConfig, not serviceConfig
+    unitConfig = {
+      ConditionPathExists = "!/var/lib/kaliun/config.json";
+    };
+
     serviceConfig = {
       Type = "oneshot";
       RemainAfterExit = false;
@@ -149,8 +155,6 @@
       TTYPath = "/dev/tty1";
       TTYReset = true;
       TTYVHangup = true;
-      # Only run if not yet claimed (! means "if NOT exists")
-      ConditionPathExists = "!/var/lib/kaliun/config.json";
     };
     
     path = with pkgs; [curl jq qrencode util-linux coreutils ncurses git];

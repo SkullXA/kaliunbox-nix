@@ -70,6 +70,23 @@
             fi
           fi
 
+          # Fetch disk usage info from inside the VM
+          echo "Fetching disk usage info..."
+          DISK_OUTPUT=$(qga_exec "df -B1 /mnt/data 2>/dev/null | tail -1")
+          if [ -n "$DISK_OUTPUT" ]; then
+            DISK_TOTAL=$(echo "$DISK_OUTPUT" | ${pkgs.gawk}/bin/awk '{print $2}')
+            DISK_USED=$(echo "$DISK_OUTPUT" | ${pkgs.gawk}/bin/awk '{print $3}')
+            DISK_AVAIL=$(echo "$DISK_OUTPUT" | ${pkgs.gawk}/bin/awk '{print $4}')
+            if [ -n "$DISK_TOTAL" ] && [ -n "$DISK_USED" ]; then
+              ${pkgs.jq}/bin/jq -n \
+                --argjson total "$DISK_TOTAL" \
+                --argjson used "$DISK_USED" \
+                --argjson available "$DISK_AVAIL" \
+                '{total_bytes: $total, used_bytes: $used, available_bytes: $available}' > /var/lib/havm/ha-disk.json
+              echo "Disk info cached: $DISK_USED / $DISK_TOTAL bytes"
+            fi
+          fi
+
           # Fetch device and integration counts from .storage files
           echo "Fetching device and integration counts..."
           STORAGE_PATH="/mnt/data/supervisor/homeassistant/.storage"
