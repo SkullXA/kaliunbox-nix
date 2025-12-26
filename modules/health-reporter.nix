@@ -401,10 +401,67 @@ in {
   systemd.timers.kaliun-health-reporter = {
     wantedBy = ["timers.target"];
     timerConfig = {
-      OnBootSec = "2min";
-      OnUnitActiveSec = "5min";  # Report every 5 minutes for near real-time dashboard updates
+      OnBootSec = "30s";  # Report quickly after boot (was 2min)
+      OnUnitActiveSec = "1min";  # Report every minute for real-time updates (was 5min)
       Unit = "kaliun-health-reporter.service";
       Persistent = true;
     };
+  };
+
+  # Trigger health report immediately when network comes up or IP changes
+  systemd.services.kaliun-network-trigger = {
+    description = "Trigger health report on network change";
+    wantedBy = ["network-online.target"];
+    after = ["network-online.target"];
+    serviceConfig = {
+      Type = "oneshot";
+      RemainAfterExit = true;
+    };
+    script = ''
+      # Wait a moment for IP to stabilize
+      sleep 5
+      # Trigger immediate health report
+      ${pkgs.systemd}/bin/systemctl start kaliun-health-reporter.service || true
+      ${pkgs.systemd}/bin/systemctl start kaliun-log-reporter.service || true
+    '';
+  };
+
+  # Watch for IP address changes and trigger reports
+  systemd.services.kaliun-ip-watcher = {
+    description = "Watch for IP changes and report";
+    wantedBy = ["multi-user.target"];
+    after = ["network-online.target"];
+    wants = ["network-online.target"];
+    serviceConfig = {
+      Type = "simple";
+      Restart = "always";
+      RestartSec = "10s";
+    };
+    script = ''
+      IP_FILE="/var/lib/kaliun/last_known_ip"
+      mkdir -p /var/lib/kaliun
+
+      while true; do
+        # Get current IP
+        CURRENT_IP=$(${pkgs.iproute2}/bin/ip route get 1.1.1.1 2>/dev/null | ${pkgs.gawk}/bin/awk '{print $7; exit}' || echo "")
+
+        if [ -n "$CURRENT_IP" ]; then
+          LAST_IP=""
+          if [ -f "$IP_FILE" ]; then
+            LAST_IP=$(cat "$IP_FILE" 2>/dev/null || echo "")
+          fi
+
+          if [ "$CURRENT_IP" != "$LAST_IP" ]; then
+            echo "IP changed from $LAST_IP to $CURRENT_IP - triggering reports"
+            echo "$CURRENT_IP" > "$IP_FILE"
+            # Trigger immediate reports
+            ${pkgs.systemd}/bin/systemctl start kaliun-health-reporter.service || true
+            ${pkgs.systemd}/bin/systemctl start kaliun-log-reporter.service || true
+          fi
+        fi
+
+        sleep 30
+      done
+    '';
   };
 }
