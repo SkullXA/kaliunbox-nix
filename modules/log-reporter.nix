@@ -173,8 +173,8 @@ in {
   systemd.timers.kaliun-log-reporter = {
     wantedBy = ["timers.target"];
     timerConfig = {
-      OnBootSec = "45s";  # Report quickly after boot (was 1min)
-      OnUnitActiveSec = "1min";  # Send logs every minute (was 2min)
+      OnBootSec = "45s";  # Report quickly after boot
+      OnUnitActiveSec = "2min";  # Send logs every 2 minutes (balanced)
       Unit = "kaliun-log-reporter.service";
       Persistent = true;
     };

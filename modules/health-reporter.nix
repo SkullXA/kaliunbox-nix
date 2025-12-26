@@ -401,8 +401,8 @@ in {
   systemd.timers.kaliun-health-reporter = {
     wantedBy = ["timers.target"];
     timerConfig = {
-      OnBootSec = "30s";  # Report quickly after boot (was 2min)
-      OnUnitActiveSec = "1min";  # Report every minute for real-time updates (was 5min)
+      OnBootSec = "30s";  # Report quickly after boot
+      OnUnitActiveSec = "3min";  # Report every 3 minutes (balanced between freshness and efficiency)
       Unit = "kaliun-health-reporter.service";
       Persistent = true;
     };
